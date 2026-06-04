@@ -238,11 +238,17 @@ function renderAddCustomer(container) {
         const selectedPlan = window.AppState.plans.find(p => p.name === data.plan);
         const amount = selectedPlan ? (selectedPlan.price || 0) : 0;
 
+        const maxId = window.AppState.customers.reduce((max, c) => {
+            const num = parseInt(c.id);
+            return !isNaN(num) && num > max ? num : max;
+        }, 100);
+
         const newCust = {
             ...data,
             amount: amount,
-            id: (100 + window.AppState.customers.length + 1).toString(),
+            id: (maxId + 1).toString(),
             status: 'Active',
+            expiry: data.expiryDate || '',
             createdAt: new Date().toISOString()
         };
 

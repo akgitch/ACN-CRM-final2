@@ -3,8 +3,8 @@
  * Handles State, Routing, UI Feedback, and Navigation
  */
 import { auth, db } from './firebase-config.js';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-auth.js";
-import { collection, addDoc, query, where, getDocs, limit, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-firestore.js";
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-auth.js";
+import { collection, addDoc, query, where, getDocs, limit, doc, getDoc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-firestore.js";
 
 // Global App State
 window.AppState = {
@@ -71,6 +71,7 @@ function initApp() {
                             role: 'Admin',
                             accessLevel: 'Full'
                         };
+                        await checkAndSeedDatabase(user.uid);
                     } else {
                         showToast('Access Denied: Not a staff member', 'error');
                         await signOut(auth);
@@ -85,6 +86,7 @@ function initApp() {
                         role: data.role,
                         accessLevel: data.accessLevel
                     };
+                    await checkAndSeedDatabase(user.uid);
                 }
 
                 if (overlay) overlay.style.display = 'none';
@@ -284,7 +286,7 @@ function setupEventListeners() {
             const password = document.getElementById('admin-password').value;
 
             if (!email || !password) {
-                showToast('Please enter both ID and Password', 'error');
+                showToast('Please enter both Email and Password', 'error');
                 return;
             }
 
@@ -296,16 +298,7 @@ function setupEventListeners() {
             } catch (error) {
                 console.error("Login Error:", error.code, error.message);
                 if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                    showToast('Wait... Registering this as your admin account...', 'info');
-                    // Fallback to auto-registration if it's the first time
-                    try {
-                        const loginEmail = email.includes('@') ? email : `${email}@acn.com`;
-                        await createUserWithEmailAndPassword(auth, loginEmail, password);
-                        showToast('Admin Account Created & Logged In', 'success');
-                    } catch (regErr) {
-                        showToast('Invalid credentials. Check your Password.', 'error');
-                        console.error("Registration Fallback Error:", regErr);
-                    }
+                    showToast('Invalid email or password. Please try again.', 'error');
                 } else if (error.code === 'auth/operation-not-allowed') {
                     showToast('Login provider not enabled in Firebase Console.', 'error');
                 } else {
@@ -315,19 +308,22 @@ function setupEventListeners() {
         });
     }
 
-    // Auto-Setup Helper Logic (Optional link in UI)
-    const setupBtn = document.getElementById('setup-admin-link');
-    if (setupBtn) {
-        setupBtn.addEventListener('click', async (e) => {
+    // Forgot Password Logic
+    const forgotBtn = document.getElementById('forgot-password-link');
+    if (forgotBtn) {
+        forgotBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             const email = document.getElementById('admin-id').value;
-            const password = document.getElementById('admin-password').value;
+            if (!email) {
+                showToast('Please enter your email address first', 'error');
+                return;
+            }
+            const loginEmail = email.includes('@') ? email : `${email}@acn.com`;
             try {
-                const loginEmail = email.includes('@') ? email : `${email}@acn.com`;
-                await createUserWithEmailAndPassword(auth, loginEmail, password);
-                showToast('First Admin setup successfully!', 'success');
+                await sendPasswordResetEmail(auth, loginEmail);
+                showToast('Password reset link sent to ' + loginEmail, 'success');
             } catch (error) {
-                showToast('Project already has an admin or check Firebase console.', 'error');
+                showToast('Failed to send reset link: ' + error.message, 'error');
             }
         });
     }
@@ -572,3 +568,83 @@ window.showLogoutConfirmation = showLogoutConfirmation;
 window.logout = logout;
 window.showToast = showToast;
 window.getDaysLeft = getDaysLeft;
+
+async function checkAndSeedDatabase(uid) {
+    try {
+        // 1. Seed plans if empty
+        const plansSnap = await getDocs(collection(db, "plans"));
+        if (plansSnap.empty) {
+            console.log("Seeding default plans...");
+            const defaultPlans = [
+                { name: '50 Mbps Unlimited', price: 499, validity: 30, speed: '50 Mbps', type: 'Fiber' },
+                { name: '100 Mbps Pro', price: 799, validity: 30, speed: '100 Mbps', type: 'Fiber' },
+                { name: '200 Mbps Ultra', price: 1299, validity: 30, speed: '200 Mbps', type: 'Fiber' }
+            ];
+            for (const p of defaultPlans) {
+                await addDoc(collection(db, "plans"), p);
+            }
+        }
+
+        // 2. Seed staff if admin record is missing
+        const staffDocRef = doc(db, "staff", uid);
+        const staffDoc = await getDoc(staffDocRef);
+        if (!staffDoc.exists()) {
+            console.log("Seeding admin staff member...");
+            await setDoc(staffDocRef, {
+                fullName: 'Admin User',
+                role: 'Super Admin',
+                accessLevel: 'Full',
+                status: 'Online',
+                email: 'admin@acn.com',
+                createdAt: serverTimestamp()
+            });
+        }
+
+        // 3. Seed customers if empty
+        const customersSnap = await getDocs(collection(db, "customers"));
+        if (customersSnap.empty) {
+            console.log("Seeding default customers...");
+            const today = new Date();
+            const formatOffsetDate = (daysOffset) => {
+                const d = new Date(today);
+                d.setDate(today.getDate() + daysOffset);
+                return d.toISOString().split('T')[0];
+            };
+
+            const defaultCustomers = [
+                { id: '101', name: 'Alen Walker', phone: '9876543210', address: '123 Blue St', plan: '50 Mbps Unlimited', amount: 499, install: formatOffsetDate(-10), expiryDate: formatOffsetDate(20), mac: 'AA:BB:CC:DD:EE:01', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(20) },
+                { id: '102', name: 'John Doe', phone: '8765432109', address: '456 Orange Ave', plan: '100 Mbps Pro', amount: 799, install: formatOffsetDate(-13), expiryDate: formatOffsetDate(17), mac: 'AA:BB:CC:DD:EE:02', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(17) },
+                { id: '103', name: 'Jane Smith', phone: '7654321098', address: '789 Link Rd', plan: '50 Mbps Unlimited', amount: 499, install: formatOffsetDate(-35), expiryDate: formatOffsetDate(-5), mac: 'AA:BB:CC:DD:EE:03', status: 'Expired', notes: '', paymentStatus: 'Due', expiry: formatOffsetDate(-5) },
+                { id: '104', name: 'Michael Ross', phone: '6543210987', address: '101 Signal Way', plan: '200 Mbps Ultra', amount: 1299, install: formatOffsetDate(-9), expiryDate: formatOffsetDate(21), mac: 'AA:BB:CC:DD:EE:04', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(21) },
+                { id: '105', name: 'Rachel Zane', phone: '5432109876', address: '202 Fiber Blvd', plan: '100 Mbps Pro', amount: 799, install: formatOffsetDate(-26), expiryDate: formatOffsetDate(4), mac: 'AA:BB:CC:DD:EE:05', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(4) }
+            ];
+            for (const c of defaultCustomers) {
+                await addDoc(collection(db, "customers"), c);
+            }
+        }
+
+        // 4. Seed payments if empty
+        const paymentsSnap = await getDocs(collection(db, "payments"));
+        if (paymentsSnap.empty) {
+            console.log("Seeding default payments...");
+            const today = new Date();
+            const formatOffsetDate = (daysOffset) => {
+                const d = new Date(today);
+                d.setDate(today.getDate() + daysOffset);
+                return d.toISOString().split('T')[0];
+            };
+
+            const defaultPayments = [
+                { id: 'RC-8821', customer: 'Alen Walker', amount: 499, date: formatOffsetDate(-10), method: 'UPI', status: 'Paid', paid: true },
+                { id: 'RC-8820', customer: 'Michael Ross', amount: 1299, date: formatOffsetDate(-9), method: 'Cash', status: 'Paid', paid: true },
+                { id: 'RC-8819', customer: 'John Doe', amount: 799, date: formatOffsetDate(-13), method: 'UPI', status: 'Paid', paid: true },
+                { id: 'RC-8818', customer: 'Jane Smith', amount: 499, date: formatOffsetDate(-5), method: '-', status: 'Due', paid: false }
+            ];
+            for (const p of defaultPayments) {
+                await addDoc(collection(db, "payments"), p);
+            }
+        }
+    } catch (e) {
+        console.error("Error seeding database:", e);
+    }
+}

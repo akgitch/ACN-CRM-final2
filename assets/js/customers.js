@@ -16,19 +16,29 @@ window.confirmDelete = confirmDelete;
 window.deleteCustomer = deleteCustomer;
 window.togglePaymentStatus = togglePaymentStatus;
 
-// Real-time listener for Customers
-onSnapshot(query(collection(db, "customers"), orderBy("id", "desc")), (snapshot) => {
-    window.AppState.customers = snapshot.docs.map(doc => ({
-        firestoreId: doc.id,
-        ...doc.data()
-    }));
-    // Trigger re-render if we are in customers or dashboard
-    if (window.AppState.currentSection === 'all-customers' ||
-        window.AppState.currentSection.includes('customers') ||
-        window.AppState.currentSection === 'dashboard') {
-        renderSection(window.AppState.currentSection);
+// Real-time listener initializer for Customers
+window.initCustomersListener = function() {
+    if (window.AppState.customersUnsub) {
+        window.AppState.customersUnsub();
     }
-});
+    window.AppState.customersUnsub = onSnapshot(collection(db, "customers"), (snapshot) => {
+        window.AppState.customers = snapshot.docs.map(doc => ({
+            firestoreId: doc.id,
+            ...doc.data()
+        }));
+        // Sort locally by ID descending
+        window.AppState.customers.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
+
+        // Trigger re-render if we are in customers or dashboard
+        if (window.AppState.currentSection === 'all-customers' ||
+            window.AppState.currentSection.includes('customers') ||
+            window.AppState.currentSection === 'dashboard') {
+            renderSection(window.AppState.currentSection);
+        }
+    }, (error) => {
+        console.error("Customers onSnapshot error:", error);
+    });
+};
 
 function renderCustomersTable(container, options = {}) {
     const filter = options.filter || window.AppState.currentFilter || 'all';
@@ -126,6 +136,9 @@ function renderCustomersTable(container, options = {}) {
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
                                         </button>
                                         ${isReadOnly() ? '' : `
+                                        <button class="action-btn recharge" onclick="rechargeCustomer('${c.firestoreId}')" title="Recharge Customer">
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                        </button>
                                         <button class="action-btn edit" onclick="editCustomer('${c.firestoreId}')" title="Edit Customer Profile">
                                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4Z"/></svg>
                                         </button>
@@ -511,3 +524,104 @@ async function togglePaymentStatus(customerName, firestoreId, newStatus) {
         }
     }
 }
+
+async function rechargeCustomer(firestoreId) {
+    if (isReadOnly()) {
+        showToast('Permission Denied: Read-Only User', 'error');
+        return;
+    }
+    const c = window.AppState.customers.find(x => x.firestoreId === firestoreId);
+    if (!c) return;
+
+    // Calculate new expiry date for visual display
+    const currentExpiryStr = c.expiryDate || c.expiry;
+    let baseDate = new Date();
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    
+    if (currentExpiryStr) {
+        const expDate = new Date(currentExpiryStr);
+        if (!isNaN(expDate.getTime()) && expDate > today) {
+            baseDate = expDate; // Extend from future expiry
+        }
+    }
+    baseDate.setHours(0,0,0,0);
+
+    const selectedPlan = window.AppState.plans.find(p => p.name === c.plan);
+    const validity = selectedPlan ? (selectedPlan.validity || 30) : 30;
+    const amount = selectedPlan ? (selectedPlan.price || 0) : (c.amount || 0);
+
+    const newExpiryDate = new Date(baseDate);
+    newExpiryDate.setDate(newExpiryDate.getDate() + validity);
+    const newExpiryStr = newExpiryDate.toISOString().split('T')[0];
+
+    openModal(`
+        <div style="text-align: center; padding: 10px;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 48px; height: 48px; margin-bottom: 20px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <h3 style="margin-bottom: 12px;">Recharge Customer</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                Recharge <b>${c.name}</b> for plan <b>${c.plan || 'Default Plan'}</b>?
+            </p>
+            <div style="background: rgba(0,0,0,0.02); padding: 16px; border-radius: 12px; margin-bottom: 24px; text-align: left; font-size: 0.9rem; border: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-secondary);">Plan Price:</span>
+                    <span style="font-weight: 600;">₹${amount.toLocaleString()}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-secondary);">Current Expiry:</span>
+                    <span style="font-weight: 600;">${currentExpiryStr || 'Expired/None'}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; color: #22c55e; font-weight: 600; border-top: 1px solid var(--glass-border); padding-top: 8px; margin-top: 4px;">
+                    <span>New Expiry:</span>
+                    <span>${newExpiryStr} (+${validity} Days)</span>
+                </div>
+            </div>
+            <p style="font-weight: 600; margin-bottom: 20px; font-size: 0.95rem;">Has the customer paid for this recharge?</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button class="glass-button" style="border-color: #ef4444; color: #ef4444; padding: 10px 16px; font-size: 0.85rem;" onclick="processRecharge('${firestoreId}', '${newExpiryStr}', ${amount}, 'Due')">No (Mark as Due)</button>
+                <button class="glass-button primary" style="background: #22c55e; padding: 10px 16px; font-size: 0.85rem;" onclick="processRecharge('${firestoreId}', '${newExpiryStr}', ${amount}, 'Paid')">Yes (Mark as Paid)</button>
+            </div>
+        </div>
+    `);
+}
+
+async function processRecharge(firestoreId, newExpiryStr, amount, payStatus) {
+    try {
+        const c = window.AppState.customers.find(x => x.firestoreId === firestoreId);
+        if (!c) return;
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // 1. Update customer doc
+        await updateDoc(doc(db, "customers", firestoreId), {
+            expiry: newExpiryStr,
+            expiryDate: newExpiryStr,
+            paymentStatus: payStatus,
+            status: 'Active',
+            amount: amount
+        });
+
+        // 2. Add payment record
+        await addDoc(collection(db, "payments"), {
+            id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
+            customer: c.name,
+            amount: amount,
+            date: today,
+            method: payStatus === 'Paid' ? 'UPI' : '-',
+            status: payStatus,
+            paid: payStatus === 'Paid',
+            customerId: c.id,
+            createdAt: new Date().toISOString()
+        });
+
+        showToast(`Recharge successful! Extended to ${newExpiryStr} (${payStatus})`, 'success');
+        closeModal();
+    } catch (error) {
+        console.error("Recharge failed:", error);
+        showToast('Failed to complete recharge', 'error');
+    }
+}
+
+// Expose Recharge Globals
+window.rechargeCustomer = rechargeCustomer;
+window.processRecharge = processRecharge;

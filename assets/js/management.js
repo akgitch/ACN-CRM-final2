@@ -25,30 +25,42 @@ window.editPayment = editPayment;
 window.deletePayment = deletePayment;
 window.confirmDeletePayment = confirmDeletePayment;
 window.addStaff = addStaff;
-// Real-time listener for Payments
-onSnapshot(query(collection(db, "payments"), orderBy("date", "desc")), (snapshot) => {
-    window.AppState.payments = snapshot.docs.map(doc => ({ firestoreId: doc.id, ...doc.data() }));
-    if (['payments', 'dashboard', 'all-customers', 'expiring-soon'].includes(window.AppState.currentSection)) {
-        renderSection(window.AppState.currentSection);
-    }
-});
+// Real-time listener initializer for Management (payments, plans, staff)
+window.initManagementListeners = function() {
+    if (window.AppState.paymentsUnsub) window.AppState.paymentsUnsub();
+    if (window.AppState.plansUnsub) window.AppState.plansUnsub();
+    if (window.AppState.staffUnsub) window.AppState.staffUnsub();
 
+    window.AppState.paymentsUnsub = onSnapshot(collection(db, "payments"), (snapshot) => {
+        window.AppState.payments = snapshot.docs.map(doc => ({ firestoreId: doc.id, ...doc.data() }));
+        // Sort locally by date descending
+        window.AppState.payments.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-// Real-time listener for Plans
-onSnapshot(collection(db, "plans"), (snapshot) => {
-    window.AppState.plans = snapshot.docs.map(doc => ({ firestoreId: doc.id, ...doc.data() }));
-    if (window.AppState.currentSection === 'plans') {
-        renderSection('plans');
-    }
-});
+        if (['payments', 'dashboard', 'all-customers', 'expiring-soon'].includes(window.AppState.currentSection)) {
+            renderSection(window.AppState.currentSection);
+        }
+    }, (error) => {
+        console.error("Payments onSnapshot error:", error);
+    });
 
-// Real-time listener for Staff
-onSnapshot(collection(db, "staff"), (snapshot) => {
-    window.AppState.staff = snapshot.docs.map(doc => ({ firestoreId: doc.id, ...doc.data() }));
-    if (window.AppState.currentSection === 'staff') {
-        renderSection('staff');
-    }
-});
+    window.AppState.plansUnsub = onSnapshot(collection(db, "plans"), (snapshot) => {
+        window.AppState.plans = snapshot.docs.map(doc => ({ firestoreId: doc.id, ...doc.data() }));
+        if (window.AppState.currentSection === 'plans') {
+            renderSection('plans');
+        }
+    }, (error) => {
+        console.error("Plans onSnapshot error:", error);
+    });
+
+    window.AppState.staffUnsub = onSnapshot(collection(db, "staff"), (snapshot) => {
+        window.AppState.staff = snapshot.docs.map(doc => ({ firestoreId: doc.id, ...doc.data() }));
+        if (window.AppState.currentSection === 'staff') {
+            renderSection('staff');
+        }
+    }, (error) => {
+        console.error("Staff onSnapshot error:", error);
+    });
+};
 
 function renderPayments(container, params = {}) {
     const isToday = params.module === 'today';

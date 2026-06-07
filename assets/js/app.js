@@ -8,28 +8,10 @@ import { collection, addDoc, query, where, getDocs, limit, doc, getDoc, updateDo
 
 // Global App State
 window.AppState = {
-    customers: [
-        { id: '101', name: 'Alen Walker', phone: '9876543210', address: '123 Blue St', plan: '50 Mbps Unlimited', price: 499, install: '2026-01-25', expiry: '2026-03-25', mac: 'AA:BB:CC:DD:EE:01', status: 'Active', notes: '' },
-        { id: '102', name: 'John Doe', phone: '8765432109', address: '456 Orange Ave', plan: '100 Mbps Pro', price: 799, install: '2026-01-22', expiry: '2026-02-22', mac: 'AA:BB:CC:DD:EE:02', status: 'Active', notes: '' },
-        { id: '103', name: 'Jane Smith', phone: '7654321098', address: '789 Link Rd', plan: '50 Mbps Unlimited', price: 499, install: '2026-01-15', expiry: '2026-02-15', mac: 'AA:BB:CC:DD:EE:03', status: 'Expired', notes: '' },
-        { id: '104', name: 'Michael Ross', phone: '6543210987', address: '101 Signal Way', plan: '200 Mbps Ultra', price: 1299, install: '2026-01-26', expiry: '2026-02-26', mac: 'AA:BB:CC:DD:EE:04', status: 'Active', notes: '' },
-        { id: '105', name: 'Rachel Zane', phone: '5432109876', address: '202 Fiber Blvd', plan: '100 Mbps Pro', price: 799, install: '2026-02-10', expiry: '2026-03-10', mac: 'AA:BB:CC:DD:EE:05', status: 'Active', notes: '' }
-    ],
-    plans: [
-        { name: '50 Mbps Unlimited', price: 499, validity: 30 },
-        { name: '100 Mbps Pro', price: 799, validity: 30 },
-        { name: '200 Mbps Ultra', price: 1299, validity: 30 }
-    ],
-    staff: [
-        { id: 'S1', name: 'Admin User', role: 'Super Admin', access: 'Full', status: 'Online', password: 'password' },
-        { id: 'S2', name: 'Staff One', role: 'Support', access: 'Read/Write', status: 'Away', password: 'password' },
-        { id: 'S3', name: 'Technician Ali', role: 'Technician', access: 'Read Only', status: 'Offline', password: 'password' }
-    ],
-    payments: [
-        { id: 'RC-8821', customer: 'Alen Walker', amount: 499, date: new Date().toISOString().split('T')[0], method: 'UPI', status: 'Paid' },
-        { id: 'RC-8820', customer: 'Michael Ross', amount: 1299, date: new Date().toISOString().split('T')[0], method: 'Cash', status: 'Paid' },
-        { id: 'RC-8819', customer: 'John Doe', amount: 799, date: '2026-02-15', method: 'UPI', status: 'Paid' }
-    ],
+    customers: [],
+    plans: [],
+    staff: [],
+    payments: [],
     currentSection: 'dashboard',
     currentFilter: 'all',
     user: { name: 'Admin User', role: 'Super Admin' },
@@ -59,25 +41,12 @@ function initApp() {
 
         if (user) {
             try {
-                // Verify user in "staff" collection
-                const staffDoc = await getDoc(doc(db, "staff", user.uid));
+                const staffDocRef = doc(db, "staff", user.uid);
+                const staffDoc = await getDoc(staffDocRef);
 
-                if (!staffDoc.exists()) {
-                    // Check if they are the primary admin (fallback for bootstrap)
-                    if (user.email === 'admin@acn.com') {
-                        window.AppState.isAuthenticated = true;
-                        window.AppState.user = {
-                            name: 'Super Admin',
-                            role: 'Admin',
-                            accessLevel: 'Full'
-                        };
-                        await checkAndSeedDatabase(user.uid);
-                    } else {
-                        showToast('Access Denied: Not a staff member', 'error');
-                        await signOut(auth);
-                        return;
-                    }
-                } else {
+                let isAuthorized = false;
+
+                if (staffDoc.exists()) {
                     const data = staffDoc.data();
                     window.AppState.isAuthenticated = true;
                     window.AppState.user = {
@@ -86,7 +55,49 @@ function initApp() {
                         role: data.role,
                         accessLevel: data.accessLevel
                     };
+                    isAuthorized = true;
                     await checkAndSeedDatabase(user.uid);
+                } else {
+                    // Check if the staff collection is completely empty (fresh bootstrap)
+                    const staffSnap = await getDocs(collection(db, "staff"));
+                    if (staffSnap.empty || user.email === 'admin@acn.com') {
+                        // Bootstrap this first user as Super Admin
+                        const adminName = user.email.split('@')[0];
+                        const capitalizedName = adminName.charAt(0).toUpperCase() + adminName.slice(1);
+                        
+                        await setDoc(staffDocRef, {
+                            fullName: capitalizedName + ' (Admin)',
+                            role: 'Super Admin',
+                            accessLevel: 'Full',
+                            status: 'Online',
+                            email: user.email,
+                            createdAt: serverTimestamp()
+                        });
+
+                        window.AppState.isAuthenticated = true;
+                        window.AppState.user = {
+                            uid: user.uid,
+                            name: capitalizedName + ' (Admin)',
+                            role: 'Super Admin',
+                            accessLevel: 'Full'
+                        };
+                        isAuthorized = true;
+                        await checkAndSeedDatabase(user.uid);
+                    }
+                }
+
+                if (!isAuthorized) {
+                    showToast('Access Denied: Not a staff member', 'error');
+                    await signOut(auth);
+                    return;
+                }
+
+                // Initialize database listeners
+                if (typeof window.initCustomersListener === 'function') {
+                    window.initCustomersListener();
+                }
+                if (typeof window.initManagementListeners === 'function') {
+                    window.initManagementListeners();
                 }
 
                 if (overlay) overlay.style.display = 'none';
@@ -102,8 +113,33 @@ function initApp() {
                 await signOut(auth);
             }
         } else {
+            // Unsubscribe from database listeners
+            if (window.AppState.customersUnsub) {
+                window.AppState.customersUnsub();
+                window.AppState.customersUnsub = null;
+            }
+            if (window.AppState.paymentsUnsub) {
+                window.AppState.paymentsUnsub();
+                window.AppState.paymentsUnsub = null;
+            }
+            if (window.AppState.plansUnsub) {
+                window.AppState.plansUnsub();
+                window.AppState.plansUnsub = null;
+            }
+            if (window.AppState.staffUnsub) {
+                window.AppState.staffUnsub();
+                window.AppState.staffUnsub = null;
+            }
+
+            // Clear AppState data on logout
+            window.AppState.customers = [];
+            window.AppState.plans = [];
+            window.AppState.payments = [];
+            window.AppState.staff = [];
+            window.AppState.initialized = false;
             window.AppState.isAuthenticated = false;
             window.AppState.currentSection = 'login';
+
             if (overlay) {
                 overlay.style.display = 'flex';
                 overlay.classList.remove('login-hidden');

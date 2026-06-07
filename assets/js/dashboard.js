@@ -58,7 +58,7 @@ function renderDashboard(container) {
                         ${topDue.map(p => `
                             <li style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                                 <span>${p.name}</span>
-                                <span style="font-weight: 600;">₹${p.planPrice || 0}</span>
+                                <span style="font-weight: 600;">₹${(p.amount ?? p.planPrice ?? p.price ?? 0).toLocaleString()}</span>
                             </li>
                         `).join('')}
                         ${moreCount > 0 ? `<li style="font-style: italic; opacity: 0.8; margin-top: 4px;">+${moreCount} more...</li>` : ''}

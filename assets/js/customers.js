@@ -533,7 +533,7 @@ async function rechargeCustomer(firestoreId) {
     const c = window.AppState.customers.find(x => x.firestoreId === firestoreId);
     if (!c) return;
 
-    // Calculate new expiry date for visual display
+    // Calculate base date for expiry extensions
     const currentExpiryStr = c.expiryDate || c.expiry;
     let baseDate = new Date();
     const today = new Date();
@@ -547,25 +547,46 @@ async function rechargeCustomer(firestoreId) {
     }
     baseDate.setHours(0,0,0,0);
 
-    const selectedPlan = window.AppState.plans.find(p => p.name === c.plan);
-    const validity = selectedPlan ? (selectedPlan.validity || 30) : 30;
-    const amount = selectedPlan ? (selectedPlan.price || 0) : (c.amount || 0);
-
-    const newExpiryDate = new Date(baseDate);
-    newExpiryDate.setDate(newExpiryDate.getDate() + validity);
-    const newExpiryStr = newExpiryDate.toISOString().split('T')[0];
+    const planOptions = window.AppState.plans.map(p => {
+        const isSelected = p.name === c.plan ? 'selected' : '';
+        return `<option value="${p.name}" data-price="${p.price}" data-validity="${p.validity || 30}" ${isSelected}>${p.name} - ₹${p.price}</option>`;
+    }).join('');
+    
+    const planExists = window.AppState.plans.some(p => p.name === c.plan);
+    const fallbackOption = !planExists && c.plan ? `<option value="${c.plan}" data-price="${c.amount || 0}" data-validity="30" selected>${c.plan} - ₹${c.amount || 0} (Current)</option>` : '';
+    const combinedPlanOptions = fallbackOption + planOptions;
 
     openModal(`
-        <div style="text-align: center; padding: 10px;">
+        <div style="text-align: center; padding: 10px; width: 420px; max-width: 95vw; margin: 0 auto;">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 48px; height: 48px; margin-bottom: 20px;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <h3 style="margin-bottom: 12px;">Recharge Customer</h3>
             <p style="color: var(--text-secondary); margin-bottom: 20px;">
-                Recharge <b>${c.name}</b> for plan <b>${c.plan || 'Default Plan'}</b>?
+                Recharge <b>${c.name}</b>
             </p>
+            
+            <div style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px; text-align: left;">
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Select Plan / Package</label>
+                    <select id="recharge-plan-select" class="glass-input" style="width: 100%;">
+                        ${combinedPlanOptions}
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600; color: var(--text-primary);">Select Duration</label>
+                    <select id="recharge-months-select" class="glass-input" style="width: 100%;">
+                        <option value="1">1 Month</option>
+                        <option value="2">2 Months</option>
+                        <option value="3">3 Months</option>
+                        <option value="6">6 Months</option>
+                        <option value="12">12 Months</option>
+                    </select>
+                </div>
+            </div>
+
             <div style="background: rgba(0,0,0,0.02); padding: 16px; border-radius: 12px; margin-bottom: 24px; text-align: left; font-size: 0.9rem; border: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 8px;">
                 <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">Plan Price:</span>
-                    <span style="font-weight: 600;">₹${amount.toLocaleString()}</span>
+                    <span style="font-weight: 600;" id="recharge-price-display">₹0</span>
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-secondary);">Current Expiry:</span>
@@ -573,40 +594,106 @@ async function rechargeCustomer(firestoreId) {
                 </div>
                 <div style="display: flex; justify-content: space-between; color: #22c55e; font-weight: 600; border-top: 1px solid var(--glass-border); padding-top: 8px; margin-top: 4px;">
                     <span>New Expiry:</span>
-                    <span>${newExpiryStr} (+${validity} Days)</span>
+                    <span id="recharge-expiry-display">-</span>
                 </div>
             </div>
+            
             <p style="font-weight: 600; margin-bottom: 20px; font-size: 0.95rem;">Has the customer paid for this recharge?</p>
             <div style="display: flex; gap: 12px; justify-content: center;">
-                <button class="glass-button" style="border-color: #ef4444; color: #ef4444; padding: 10px 16px; font-size: 0.85rem;" onclick="processRecharge('${firestoreId}', '${newExpiryStr}', ${amount}, 'Due')">No (Mark as Due)</button>
-                <button class="glass-button primary" style="background: #22c55e; padding: 10px 16px; font-size: 0.85rem;" onclick="processRecharge('${firestoreId}', '${newExpiryStr}', ${amount}, 'Paid')">Yes (Mark as Paid)</button>
+                <button class="glass-button" style="border-color: #ef4444; color: #ef4444; padding: 10px 16px; font-size: 0.85rem;" onclick="processRecharge('${firestoreId}', 'Due')">No (Mark as Due)</button>
+                <button class="glass-button primary" style="background: #22c55e; padding: 10px 16px; font-size: 0.85rem;" onclick="processRecharge('${firestoreId}', 'Paid')">Yes (Mark as Paid)</button>
             </div>
         </div>
     `);
+
+    // Add interactivity
+    const planSelect = document.getElementById('recharge-plan-select');
+    const monthsSelect = document.getElementById('recharge-months-select');
+    const priceDisplay = document.getElementById('recharge-price-display');
+    const expiryDisplay = document.getElementById('recharge-expiry-display');
+
+    const updateCalculation = () => {
+        if (!planSelect || !monthsSelect) return;
+        const selectedOption = planSelect.options[planSelect.selectedIndex];
+        if (!selectedOption) return;
+        const planPrice = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+        const planValidity = parseInt(selectedOption.getAttribute('data-validity')) || 30;
+        const months = parseInt(monthsSelect.value) || 1;
+
+        const totalAmount = planPrice * months;
+        const totalValidityDays = planValidity * months;
+
+        const calculatedExpiryDate = new Date(baseDate);
+        calculatedExpiryDate.setDate(calculatedExpiryDate.getDate() + totalValidityDays);
+        const calculatedExpiryStr = calculatedExpiryDate.toISOString().split('T')[0];
+
+        priceDisplay.textContent = `₹${totalAmount.toLocaleString()}`;
+        expiryDisplay.textContent = `${calculatedExpiryStr} (+${totalValidityDays} Days)`;
+    };
+
+    planSelect.addEventListener('change', updateCalculation);
+    monthsSelect.addEventListener('change', updateCalculation);
+    
+    // Initial display update
+    updateCalculation();
 }
 
-async function processRecharge(firestoreId, newExpiryStr, amount, payStatus) {
+async function processRecharge(firestoreId, payStatus) {
     try {
         const c = window.AppState.customers.find(x => x.firestoreId === firestoreId);
         if (!c) return;
 
-        const today = new Date().toISOString().split('T')[0];
+        const planSelect = document.getElementById('recharge-plan-select');
+        const monthsSelect = document.getElementById('recharge-months-select');
+        if (!planSelect || !monthsSelect) return;
+
+        const selectedOption = planSelect.options[planSelect.selectedIndex];
+        if (!selectedOption) return;
+
+        const planName = planSelect.value;
+        const planPrice = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+        const planValidity = parseInt(selectedOption.getAttribute('data-validity')) || 30;
+        const months = parseInt(monthsSelect.value) || 1;
+
+        const totalAmount = planPrice * months;
+        const totalValidityDays = planValidity * months;
+
+        // Calculate base date for expiry extension
+        const currentExpiryStr = c.expiryDate || c.expiry;
+        let baseDate = new Date();
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        
+        if (currentExpiryStr) {
+            const expDate = new Date(currentExpiryStr);
+            if (!isNaN(expDate.getTime()) && expDate > today) {
+                baseDate = expDate; // Extend from future expiry
+            }
+        }
+        baseDate.setHours(0,0,0,0);
+
+        const newExpiryDate = new Date(baseDate);
+        newExpiryDate.setDate(newExpiryDate.getDate() + totalValidityDays);
+        const newExpiryStr = newExpiryDate.toISOString().split('T')[0];
+
+        const todayStr = new Date().toISOString().split('T')[0];
 
         // 1. Update customer doc
         await updateDoc(doc(db, "customers", firestoreId), {
+            plan: planName,
             expiry: newExpiryStr,
             expiryDate: newExpiryStr,
             paymentStatus: payStatus,
             status: 'Active',
-            amount: amount
+            amount: planPrice // Keep monthly price in the customer profile
         });
 
-        // 2. Add payment record
+        // 2. Add payment record (with totalAmount for the recharged duration)
         await addDoc(collection(db, "payments"), {
             id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
             customer: c.name,
-            amount: amount,
-            date: today,
+            amount: totalAmount,
+            date: todayStr,
             method: payStatus === 'Paid' ? 'UPI' : '-',
             status: payStatus,
             paid: payStatus === 'Paid',

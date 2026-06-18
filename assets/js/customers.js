@@ -212,6 +212,23 @@ function renderAddCustomer(container) {
                     </select>
                 </div>
                 <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem;">Select Duration</label>
+                    <select id="duration-select" name="duration" required style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.4);">
+                        <option value="1">1 Month</option>
+                        <option value="2">2 Months</option>
+                        <option value="3">3 Months</option>
+                        <option value="4">4 Months</option>
+                        <option value="5">5 Months</option>
+                        <option value="6">6 Months</option>
+                        <option value="7">7 Months</option>
+                        <option value="8">8 Months</option>
+                        <option value="9">9 Months</option>
+                        <option value="10">10 Months</option>
+                        <option value="11">11 Months</option>
+                        <option value="12">12 Months</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label style="display: block; margin-bottom: 8px; font-size: 0.875rem;">Expiry Date (Calculated)</label>
                     <input type="date" name="expiryDate" id="expiry-date" readonly style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(var(--acn-blue-rgb), 0.2); background: rgba(var(--acn-blue-rgb), 0.05); cursor: not-allowed;">
                 </div>
@@ -229,18 +246,21 @@ function renderAddCustomer(container) {
     // Auto-calculate expiry
     const iIn = document.getElementById('install-date');
     const pSel = document.getElementById('plan-select');
+    const dSel = document.getElementById('duration-select');
     const eIn = document.getElementById('expiry-date');
 
-    [iIn, pSel].forEach(e => e.addEventListener('change', () => {
+    const updateCalculatedExpiry = () => {
         if (iIn.value) {
             const d = new Date(iIn.value);
-            // In a real app, you'd get validity from AppState.plans, but we'll stick to 30 as default
             const selectedPlan = window.AppState.plans.find(p => p.name === pSel.value);
             const validity = selectedPlan ? (selectedPlan.validity || 30) : 30;
-            d.setDate(d.getDate() + validity);
+            const duration = parseInt(dSel.value) || 1;
+            d.setDate(d.getDate() + (validity * duration));
             eIn.value = d.toISOString().split('T')[0];
         }
-    }));
+    };
+
+    [iIn, pSel, dSel].forEach(e => e.addEventListener('change', updateCalculatedExpiry));
 
     document.getElementById('add-customer-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -577,7 +597,14 @@ async function rechargeCustomer(firestoreId) {
                         <option value="1">1 Month</option>
                         <option value="2">2 Months</option>
                         <option value="3">3 Months</option>
+                        <option value="4">4 Months</option>
+                        <option value="5">5 Months</option>
                         <option value="6">6 Months</option>
+                        <option value="7">7 Months</option>
+                        <option value="8">8 Months</option>
+                        <option value="9">9 Months</option>
+                        <option value="10">10 Months</option>
+                        <option value="11">11 Months</option>
                         <option value="12">12 Months</option>
                     </select>
                 </div>

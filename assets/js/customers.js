@@ -353,15 +353,49 @@ function editCustomer(firestoreId) {
         return;
     }
     openModal(`
-        <div style="width: 500px; max-width: 95vw;">
+        <div style="width: 550px; max-width: 95vw;">
             <h3 style="margin-bottom: 24px; display: flex; align-items: center; gap: 10px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--acn-orange);"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4Z"/></svg>
                 Edit Customer: ${c.name}
             </h3>
             <form id="edit-customer-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Full Name</label>
+                    <input type="text" name="name" value="${c.name}" required class="glass-input">
+                </div>
+                <div class="form-group">
                     <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Phone Number</label>
                     <input type="tel" name="phone" value="${c.phone}" required class="glass-input">
+                </div>
+                <div class="form-group" style="grid-column: span 2;">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Address</label>
+                    <input type="text" name="address" value="${c.address}" class="glass-input">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Router MAC</label>
+                    <input type="text" name="mac" value="${c.mac || ''}" placeholder="XX:XX:XX:XX:XX:XX" class="glass-input">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Installation Date</label>
+                    <input type="date" name="install" id="edit-install-date" value="${c.install || ''}" required class="glass-input">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Select Plan</label>
+                    <select id="edit-plan-select" name="plan" required class="glass-input">
+                        <option value="">Choose a plan</option>
+                        ${window.AppState.plans.map(p => {
+                            const isSelected = p.name === c.plan ? 'selected' : '';
+                            return `<option value="${p.name}" data-price="${p.price}" ${isSelected}>${p.name} - ₹${p.price}</option>`;
+                        }).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Plan Amount (₹)</label>
+                    <input type="number" name="amount" id="edit-amount" value="${c.amount ?? c.planPrice ?? c.price ?? 0}" placeholder="Enter amount" required class="glass-input">
+                </div>
+                <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Expiry Date</label>
+                    <input type="date" name="expiryDate" id="edit-expiry-date" value="${c.expiryDate || c.expiry || ''}" required class="glass-input">
                 </div>
                 <div class="form-group">
                     <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Status</label>
@@ -370,22 +404,6 @@ function editCustomer(firestoreId) {
                         <option value="Expired" ${c.status === 'Expired' ? 'selected' : ''}>Expired</option>
                         <option value="Suspended" ${c.status === 'Suspended' ? 'selected' : ''}>Suspended</option>
                     </select>
-                </div>
-                <div class="form-group">
-                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Installation Date</label>
-                    <input type="date" name="install" id="edit-install-date" value="${c.install || ''}" required class="glass-input">
-                </div>
-                <div class="form-group">
-                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Expiry Date</label>
-                    <input type="date" name="expiryDate" id="edit-expiry-date" value="${c.expiryDate}" required class="glass-input">
-                </div>
-                <div class="form-group">
-                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Plan Amount (₹)</label>
-                    <input type="number" name="amount" value="${c.amount ?? c.planPrice ?? c.price ?? 0}" placeholder="Enter amount" required class="glass-input">
-                </div>
-                <div class="form-group" style="grid-column: span 2;">
-                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Address</label>
-                    <input type="text" name="address" value="${c.address}" class="glass-input">
                 </div>
                 <div id="edit-error" style="grid-column: span 2; color: #ef4444; font-size: 0.8rem; height: 1.2rem;"></div>
                 <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px;">
@@ -398,7 +416,17 @@ function editCustomer(firestoreId) {
 
     const iIn = document.getElementById('edit-install-date');
     const eIn = document.getElementById('edit-expiry-date');
+    const planSel = document.getElementById('edit-plan-select');
+    const amountIn = document.getElementById('edit-amount');
     const err = document.getElementById('edit-error');
+
+    // Auto-update price when plan changes
+    planSel.addEventListener('change', () => {
+        const option = planSel.options[planSel.selectedIndex];
+        if (option && option.dataset.price) {
+            amountIn.value = option.dataset.price;
+        }
+    });
 
     iIn.addEventListener('change', () => {
         if (iIn.value) {
@@ -428,14 +456,18 @@ function editCustomer(firestoreId) {
         const fd = new FormData(e.target);
         const data = Object.fromEntries(fd.entries());
         data.amount = parseFloat(data.amount) || 0;
+        data.expiry = data.expiryDate || '';
 
         // Auto Status Update Logic
         const today = new Date().toISOString().split('T')[0];
-        if (data.expiryDate < today) {
-            data.status = 'Expired';
-        } else if (data.status === 'Expired') {
-            data.status = 'Active'; // Reactivate if date moved to future
+        if (data.status !== 'Suspended') {
+            if (data.expiryDate < today) {
+                data.status = 'Expired';
+            } else if (data.status === 'Expired') {
+                data.status = 'Active'; // Reactivate if date moved to future
+            }
         }
+
         const firestoreId = c.firestoreId;
         try {
             const customerRef = doc(db, "customers", firestoreId);

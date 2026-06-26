@@ -154,7 +154,9 @@ function initApp() {
     setInterval(() => {
         updateCustomerStatuses();
         if (window.AppState.currentSection === 'dashboard') renderSection('dashboard');
-        if (window.AppState.currentSection === 'expiring-soon') renderSection('expiring-soon');
+        if (['expiring-soon', 'expiring-today', 'expired-yesterday'].includes(window.AppState.currentSection)) {
+            renderSection(window.AppState.currentSection);
+        }
     }, 600000);
 }
 
@@ -443,6 +445,14 @@ function renderSection(sectionId) {
                     break;
                 case 'all-customers':
                     if (window.renderCustomersTable) renderCustomersTable(area, { filter: window.AppState.currentFilter });
+                    else throw new Error("renderCustomersTable not found");
+                    break;
+                case 'expiring-today':
+                    if (window.renderCustomersTable) renderCustomersTable(area, { filter: 'expiring-today' });
+                    else throw new Error("renderCustomersTable not found");
+                    break;
+                case 'expired-yesterday':
+                    if (window.renderCustomersTable) renderCustomersTable(area, { filter: 'expired-yesterday' });
                     else throw new Error("renderCustomersTable not found");
                     break;
                 case 'expiring-soon':

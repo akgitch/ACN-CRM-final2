@@ -30,9 +30,8 @@ window.initCustomersListener = function() {
         window.AppState.customers.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
 
         // Trigger re-render if we are in customers or dashboard
-        if (window.AppState.currentSection === 'all-customers' ||
-            window.AppState.currentSection.includes('customers') ||
-            window.AppState.currentSection === 'dashboard') {
+        if (['all-customers', 'dashboard', 'expiring-soon', 'expiring-today', 'expired-yesterday'].includes(window.AppState.currentSection) ||
+            window.AppState.currentSection.includes('customers')) {
             renderSection(window.AppState.currentSection);
         }
     }, (error) => {
@@ -46,23 +45,50 @@ function renderCustomersTable(container, options = {}) {
     let title = 'All Customers';
 
     // Apply Filters
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
+    const sevenDaysLaterDate = new Date();
+    sevenDaysLaterDate.setDate(sevenDaysLaterDate.getDate() + 7);
+    const sevenDaysLaterStr = sevenDaysLaterDate.toISOString().split('T')[0];
+
     if (filter === 'expiring') {
-        const today = new Date();
-        const sevenDaysLater = new Date();
-        sevenDaysLater.setDate(today.getDate() + 7);
         displayCustomers = displayCustomers.filter(c => {
-            const exp = new Date(c.expiry);
-            return exp >= today && exp <= sevenDaysLater;
+            const exp = c.expiryDate || c.expiry;
+            return exp && exp >= tomorrowStr && exp <= sevenDaysLaterStr;
         });
         title = 'Expiring Soon (Next 7 Days)';
+    } else if (filter === 'expiring-today') {
+        displayCustomers = displayCustomers.filter(c => {
+            const exp = c.expiryDate || c.expiry;
+            return exp && exp === todayStr;
+        });
+        title = 'Expiring Today';
+    } else if (filter === 'expired-yesterday') {
+        displayCustomers = displayCustomers.filter(c => {
+            const exp = c.expiryDate || c.expiry;
+            return exp && exp === yesterdayStr;
+        });
+        title = 'Expired Yesterday';
     } else if (filter === 'Active' || filter === 'Expired') {
         displayCustomers = displayCustomers.filter(c => c.status === filter);
         title = `${filter} Customers`;
     }
 
-    // Sorting: Nearest Expiry first for "expiring" filter
-    if (filter === 'expiring') {
-        displayCustomers.sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+    // Sorting: Nearest Expiry first for expiring filters
+    if (['expiring', 'expiring-today', 'expired-yesterday'].includes(filter)) {
+        displayCustomers.sort((a, b) => {
+            const expA = a.expiryDate || a.expiry || '';
+            const expB = b.expiryDate || b.expiry || '';
+            return expA.localeCompare(expB);
+        });
     }
 
     const tableHTML = `

@@ -88,17 +88,21 @@ function renderDashboard(container) {
 }
 
 function animateCounters() {
-    const today = new Date();
-    const sevenDaysLater = new Date();
-    sevenDaysLater.setDate(today.getDate() + 7);
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
+    const sevenDaysLaterDate = new Date();
+    sevenDaysLaterDate.setDate(sevenDaysLaterDate.getDate() + 7);
+    const sevenDaysLaterStr = sevenDaysLaterDate.toISOString().split('T')[0];
 
     const summary = {
         total: window.AppState.customers.length,
         active: window.AppState.customers.filter(c => c.status === 'Active').length,
         expired: window.AppState.customers.filter(c => c.status === 'Expired').length,
         expiring: window.AppState.customers.filter(c => {
-            const exp = new Date(c.expiry);
-            return exp >= today && exp <= sevenDaysLater;
+            const exp = c.expiryDate || c.expiry;
+            return exp && exp >= tomorrowStr && exp <= sevenDaysLaterStr;
         }).length
     };
 

@@ -30,7 +30,7 @@ window.initCustomersListener = function() {
         window.AppState.customers.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
 
         // Trigger re-render if we are in customers or dashboard
-        if (['all-customers', 'dashboard', 'expiring-soon', 'expiring-today', 'expired-yesterday'].includes(window.AppState.currentSection) ||
+        if (['all-customers', 'dashboard', 'expiring-soon', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday'].includes(window.AppState.currentSection) ||
             window.AppState.currentSection.includes('customers')) {
             renderSection(window.AppState.currentSection);
         }
@@ -62,7 +62,7 @@ function renderCustomersTable(container, options = {}) {
     if (filter === 'expiring') {
         displayCustomers = displayCustomers.filter(c => {
             const exp = c.expiryDate || c.expiry;
-            return exp && exp >= tomorrowStr && exp <= sevenDaysLaterStr;
+            return exp && exp > tomorrowStr && exp <= sevenDaysLaterStr;
         });
         title = 'Expiring Soon (Next 7 Days)';
     } else if (filter === 'expiring-today') {
@@ -71,6 +71,12 @@ function renderCustomersTable(container, options = {}) {
             return exp && exp === todayStr;
         });
         title = 'Expiring Today';
+    } else if (filter === 'expiring-tomorrow') {
+        displayCustomers = displayCustomers.filter(c => {
+            const exp = c.expiryDate || c.expiry;
+            return exp && exp === tomorrowStr;
+        });
+        title = 'Expiring Tomorrow';
     } else if (filter === 'expired-yesterday') {
         displayCustomers = displayCustomers.filter(c => {
             const exp = c.expiryDate || c.expiry;
@@ -83,7 +89,7 @@ function renderCustomersTable(container, options = {}) {
     }
 
     // Sorting: Nearest Expiry first for expiring filters
-    if (['expiring', 'expiring-today', 'expired-yesterday'].includes(filter)) {
+    if (['expiring', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday'].includes(filter)) {
         displayCustomers.sort((a, b) => {
             const expA = a.expiryDate || a.expiry || '';
             const expB = b.expiryDate || b.expiry || '';

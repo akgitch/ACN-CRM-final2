@@ -36,7 +36,7 @@ window.initManagementListeners = function() {
         // Sort locally by date descending
         window.AppState.payments.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-        if (['payments', 'dashboard', 'all-customers', 'expiring-soon', 'expiring-today', 'expired-yesterday'].includes(window.AppState.currentSection)) {
+        if (['payments', 'dashboard', 'all-customers', 'expiring-soon', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday'].includes(window.AppState.currentSection)) {
             renderSection(window.AppState.currentSection);
         }
     }, (error) => {

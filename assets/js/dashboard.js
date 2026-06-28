@@ -39,6 +39,16 @@ function renderDashboard(container) {
                 <div class="stat-value" id="expired-customers" style="color: var(--acn-orange);">0</div>
                 <div style="color: var(--acn-orange); font-size: 0.75rem;">Requires attention</div>
             </div>
+            <div class="glass-card stat-card orange" onclick="navigateTo('expiring-today')">
+                <div class="stat-label">Expiring Today</div>
+                <div class="stat-value" id="expiring-today" style="color: var(--acn-orange);">0</div>
+                <div style="color: var(--acn-orange); font-size: 0.75rem; font-weight: 600;">Action required</div>
+            </div>
+            <div class="glass-card stat-card orange" onclick="navigateTo('expiring-tomorrow')">
+                <div class="stat-label">Expiring Tomorrow</div>
+                <div class="stat-value" id="expiring-tomorrow" style="color: #f59e0b;">0</div>
+                <div style="color: #f59e0b; font-size: 0.75rem; font-weight: 600;">Renewal reminder</div>
+            </div>
             <div class="glass-card stat-card orange" onclick="navigateTo('expiring-soon')">
                 <div class="stat-label">Expiring Soon (7d)</div>
                 <div class="stat-value" id="expiring-soon">0</div>
@@ -88,6 +98,8 @@ function renderDashboard(container) {
 }
 
 function animateCounters() {
+    const todayStr = new Date().toISOString().split('T')[0];
+
     const tomorrowDate = new Date();
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
     const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
@@ -100,9 +112,17 @@ function animateCounters() {
         total: window.AppState.customers.length,
         active: window.AppState.customers.filter(c => c.status === 'Active').length,
         expired: window.AppState.customers.filter(c => c.status === 'Expired').length,
+        expiringToday: window.AppState.customers.filter(c => {
+            const exp = c.expiryDate || c.expiry;
+            return exp && exp === todayStr;
+        }).length,
+        expiringTomorrow: window.AppState.customers.filter(c => {
+            const exp = c.expiryDate || c.expiry;
+            return exp && exp === tomorrowStr;
+        }).length,
         expiring: window.AppState.customers.filter(c => {
             const exp = c.expiryDate || c.expiry;
-            return exp && exp >= tomorrowStr && exp <= sevenDaysLaterStr;
+            return exp && exp > tomorrowStr && exp <= sevenDaysLaterStr;
         }).length
     };
 
@@ -110,6 +130,8 @@ function animateCounters() {
         { id: 'total-customers', end: summary.total },
         { id: 'active-customers', end: summary.active },
         { id: 'expired-customers', end: summary.expired },
+        { id: 'expiring-today', end: summary.expiringToday },
+        { id: 'expiring-tomorrow', end: summary.expiringTomorrow },
         { id: 'expiring-soon', end: summary.expiring }
     ];
 

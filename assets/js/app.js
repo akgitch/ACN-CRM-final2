@@ -154,7 +154,7 @@ function initApp() {
     setInterval(() => {
         updateCustomerStatuses();
         if (window.AppState.currentSection === 'dashboard') renderSection('dashboard');
-        if (['expiring-soon', 'expiring-today', 'expired-yesterday'].includes(window.AppState.currentSection)) {
+        if (['expiring-soon', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday'].includes(window.AppState.currentSection)) {
             renderSection(window.AppState.currentSection);
         }
     }, 600000);
@@ -246,10 +246,12 @@ function getDaysLeft(dateStr) {
     const diffTime = exp - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays > 0) {
-        return { text: `${diffDays} Day${diffDays > 1 ? 's' : ''} Left`, color: 'var(--acn-orange)' };
+    if (diffDays > 1) {
+        return { text: `${diffDays} Days Left`, color: 'var(--acn-orange)' };
+    } else if (diffDays === 1) {
+        return { text: 'Expires Tomorrow', color: '#f59e0b' };
     } else if (diffDays === 0) {
-        return { text: 'Expires Today', color: 'var(--acn-blue)' };
+        return { text: 'Expires Today', color: 'var(--acn-orange)' };
     } else {
         const absDays = Math.abs(diffDays);
         return { text: `Expired ${absDays} Day${absDays > 1 ? 's' : ''} Ago`, color: '#ef4444' };
@@ -449,6 +451,10 @@ function renderSection(sectionId) {
                     break;
                 case 'expiring-today':
                     if (window.renderCustomersTable) renderCustomersTable(area, { filter: 'expiring-today' });
+                    else throw new Error("renderCustomersTable not found");
+                    break;
+                case 'expiring-tomorrow':
+                    if (window.renderCustomersTable) renderCustomersTable(area, { filter: 'expiring-tomorrow' });
                     else throw new Error("renderCustomersTable not found");
                     break;
                 case 'expired-yesterday':
@@ -659,9 +665,9 @@ async function checkAndSeedDatabase(uid) {
 
             const defaultCustomers = [
                 { id: '101', name: 'Alen Walker', phone: '9876543210', address: '123 Blue St', plan: '50 Mbps Unlimited', amount: 499, install: formatOffsetDate(-10), expiryDate: formatOffsetDate(20), mac: 'AA:BB:CC:DD:EE:01', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(20) },
-                { id: '102', name: 'John Doe', phone: '8765432109', address: '456 Orange Ave', plan: '100 Mbps Pro', amount: 799, install: formatOffsetDate(-13), expiryDate: formatOffsetDate(17), mac: 'AA:BB:CC:DD:EE:02', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(17) },
+                { id: '102', name: 'John Doe', phone: '8765432109', address: '456 Orange Ave', plan: '100 Mbps Pro', amount: 799, install: formatOffsetDate(-13), expiryDate: formatOffsetDate(0), mac: 'AA:BB:CC:DD:EE:02', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(0) },
                 { id: '103', name: 'Jane Smith', phone: '7654321098', address: '789 Link Rd', plan: '50 Mbps Unlimited', amount: 499, install: formatOffsetDate(-35), expiryDate: formatOffsetDate(-5), mac: 'AA:BB:CC:DD:EE:03', status: 'Expired', notes: '', paymentStatus: 'Due', expiry: formatOffsetDate(-5) },
-                { id: '104', name: 'Michael Ross', phone: '6543210987', address: '101 Signal Way', plan: '200 Mbps Ultra', amount: 1299, install: formatOffsetDate(-9), expiryDate: formatOffsetDate(21), mac: 'AA:BB:CC:DD:EE:04', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(21) },
+                { id: '104', name: 'Michael Ross', phone: '6543210987', address: '101 Signal Way', plan: '200 Mbps Ultra', amount: 1299, install: formatOffsetDate(-29), expiryDate: formatOffsetDate(1), mac: 'AA:BB:CC:DD:EE:04', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(1) },
                 { id: '105', name: 'Rachel Zane', phone: '5432109876', address: '202 Fiber Blvd', plan: '100 Mbps Pro', amount: 799, install: formatOffsetDate(-26), expiryDate: formatOffsetDate(4), mac: 'AA:BB:CC:DD:EE:05', status: 'Active', notes: '', paymentStatus: 'Paid', expiry: formatOffsetDate(4) }
             ];
             for (const c of defaultCustomers) {

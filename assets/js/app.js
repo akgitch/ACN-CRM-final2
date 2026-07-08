@@ -460,7 +460,7 @@ function renderSection(sectionId) {
                     else throw new Error("renderCustomersTable not found");
                     break;
                 case 'unpaid-recharges':
-                    if (window.renderCustomersTable) renderCustomersTable(area, { filter: 'unpaid-recharges' });
+                    if (window.renderCustomersTable) renderCustomersTable(area, { filter: params.filter || 'unpaid-recharges' });
                     else throw new Error("renderCustomersTable not found");
                     break;
                 case 'expiring-today':

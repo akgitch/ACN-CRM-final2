@@ -107,6 +107,20 @@ function renderCustomersTable(container, options = {}) {
             return payStatus === 'Due';
         });
         title = 'Recharges Done but Payment Due';
+    } else if (filter === 'unpaid-recharges-2m') {
+        displayCustomers = displayCustomers.filter(c => {
+            const currentExpiry = c.expiryDate || c.expiry || null;
+            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            return payStatus === 'Due' && (c.dueMonths || 1) === 2;
+        });
+        title = '2 Months Due Customers';
+    } else if (filter === 'unpaid-recharges-more-2m') {
+        displayCustomers = displayCustomers.filter(c => {
+            const currentExpiry = c.expiryDate || c.expiry || null;
+            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            return payStatus === 'Due' && (c.dueMonths || 1) > 2;
+        });
+        title = '2+ Months Due Customers';
     }
 
     // Sorting: Nearest Expiry first for expiring filters
@@ -464,6 +478,10 @@ function editCustomer(firestoreId) {
                         <option value="Suspended" ${c.status === 'Suspended' ? 'selected' : ''}>Suspended</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.875rem; font-weight: 600;">Due Months</label>
+                    <input type="number" name="dueMonths" id="edit-due-months" value="${c.dueMonths || 0}" min="0" required class="glass-input">
+                </div>
                 <div id="edit-error" style="grid-column: span 2; color: #ef4444; font-size: 0.8rem; height: 1.2rem;"></div>
                 <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px;">
                     <button type="button" class="glass-button" onclick="closeModal()">Cancel</button>
@@ -515,6 +533,8 @@ function editCustomer(firestoreId) {
         const fd = new FormData(e.target);
         const data = Object.fromEntries(fd.entries());
         data.amount = parseFloat(data.amount) || 0;
+        data.dueMonths = parseInt(data.dueMonths) || 0;
+        data.paymentStatus = data.dueMonths > 0 ? 'Due' : 'Paid';
         data.expiry = data.expiryDate || '';
 
         // Auto Status Update Logic

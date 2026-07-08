@@ -88,6 +88,16 @@ function renderDashboard(container) {
                     </ul>
                 </div>
             </div>
+            <div class="glass-card stat-card orange" onclick="navigateTo('unpaid-recharges', { filter: 'unpaid-recharges-2m' })">
+                <div class="stat-label">2 Months Due Customers</div>
+                <div class="stat-value" id="due-2months" style="color: var(--acn-orange);">0</div>
+                <div style="color: var(--acn-orange); font-size: 0.75rem;">Requires follow-up</div>
+            </div>
+            <div class="glass-card stat-card orange" onclick="navigateTo('unpaid-recharges', { filter: 'unpaid-recharges-more-2m' })">
+                <div class="stat-label">2+ Months Due Customers</div>
+                <div class="stat-value" id="due-more-2months" style="color: #ef4444;">0</div>
+                <div style="color: #ef4444; font-size: 0.75rem; font-weight: 600;">Critical attention</div>
+            </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
@@ -136,6 +146,16 @@ function animateCounters() {
         expiring: window.AppState.customers.filter(c => {
             const exp = c.expiryDate || c.expiry;
             return exp && exp > tomorrowStr && exp <= sevenDaysLaterStr;
+        }).length,
+        due2Months: window.AppState.customers.filter(c => {
+            const currentExpiry = c.expiryDate || c.expiry || null;
+            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            return payStatus === 'Due' && (c.dueMonths || 1) === 2;
+        }).length,
+        dueMore2Months: window.AppState.customers.filter(c => {
+            const currentExpiry = c.expiryDate || c.expiry || null;
+            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            return payStatus === 'Due' && (c.dueMonths || 1) > 2;
         }).length
     };
 
@@ -145,7 +165,9 @@ function animateCounters() {
         { id: 'expired-customers', end: summary.expired },
         { id: 'expiring-today', end: summary.expiringToday },
         { id: 'expiring-tomorrow', end: summary.expiringTomorrow },
-        { id: 'expiring-soon', end: summary.expiring }
+        { id: 'expiring-soon', end: summary.expiring },
+        { id: 'due-2months', end: summary.due2Months },
+        { id: 'due-more-2months', end: summary.dueMore2Months }
     ];
 
     counters.forEach(c => {

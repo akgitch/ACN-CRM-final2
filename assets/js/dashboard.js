@@ -3,6 +3,15 @@ window.renderDashboard = renderDashboard;
 window.animateCounters = animateCounters;
 window.initCharts = initCharts;
 
+const getCustomerDisplayStatus = (c) => {
+    if (window.getCustomerDisplayStatus) return window.getCustomerDisplayStatus(c);
+    const today = new Date().toISOString().split('T')[0];
+    const expiry = c.expiryDate || c.expiry;
+    if (c.status === 'Suspended') return 'Suspended';
+    if (expiry && expiry < today) return 'Expired';
+    return c.status || 'Active';
+};
+
 function renderDashboard(container) {
     const todayStr = new Date().toISOString().split('T')[0];
     const thisMonth = todayStr.substring(0, 7);
@@ -16,8 +25,12 @@ function renderDashboard(container) {
         .filter(p => p.date.startsWith(thisMonth) && p.status === 'Paid')
         .reduce((sum, p) => sum + p.amount, 0);
 
-    const dueCustomers = window.AppState.customers.filter(c => c.paymentStatus === 'Due');
-    const totalDueAmount = dueCustomers.reduce((sum, c) => sum + (c.amount || 0), 0);
+    const dueCustomers = window.AppState.customers.filter(c => {
+        const currentExpiry = c.expiryDate || c.expiry || null;
+        const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+        return payStatus === 'Due';
+    });
+    const totalDueAmount = dueCustomers.reduce((sum, c) => sum + ((c.amount || 0) * (c.dueMonths || 1)), 0);
     const dueCount = dueCustomers.length;
     const topDue = dueCustomers.slice(0, 3);
     const moreCount = dueCustomers.length > 3 ? dueCustomers.length - 3 : 0;
@@ -59,16 +72,16 @@ function renderDashboard(container) {
                 <div class="stat-value">₹${(monthlyCollection / 1000).toFixed(1)}K</div>
                 <div style="color: #22c55e; font-size: 0.75rem;">On track</div>
             </div>
-            <div class="glass-card stat-card" onclick="navigateTo('payments', { filter: 'Due' })" style="min-height: 160px; display: flex; flex-direction: column;">
+            <div class="glass-card stat-card" onclick="navigateTo('unpaid-recharges')" style="min-height: 160px; display: flex; flex-direction: column;">
                 <div class="stat-label">Total Due Amount</div>
                 <div class="stat-value" style="color: var(--acn-orange);">₹${totalDueAmount.toLocaleString()}</div>
                 <div style="color: var(--acn-orange); font-size: 0.75rem; font-weight: 600; margin-bottom: 12px;">${dueCount} Customers Pending</div>
                 <div style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.72rem; color: var(--text-secondary);">
+                     <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.72rem; color: var(--text-secondary);">
                         ${topDue.map(p => `
                             <li style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                                 <span>${p.name}</span>
-                                <span style="font-weight: 600;">₹${(p.amount ?? p.planPrice ?? p.price ?? 0).toLocaleString()}</span>
+                                <span style="font-weight: 600;">₹${((p.amount || 0) * (p.dueMonths || 1)).toLocaleString()}${p.dueMonths && p.dueMonths > 1 ? ` (${p.dueMonths}M)` : ''}</span>
                             </li>
                         `).join('')}
                         ${moreCount > 0 ? `<li style="font-style: italic; opacity: 0.8; margin-top: 4px;">+${moreCount} more...</li>` : ''}
@@ -110,8 +123,8 @@ function animateCounters() {
 
     const summary = {
         total: window.AppState.customers.length,
-        active: window.AppState.customers.filter(c => c.status === 'Active').length,
-        expired: window.AppState.customers.filter(c => c.status === 'Expired').length,
+        active: window.AppState.customers.filter(c => getCustomerDisplayStatus(c) === 'Active').length,
+        expired: window.AppState.customers.filter(c => getCustomerDisplayStatus(c) === 'Expired').length,
         expiringToday: window.AppState.customers.filter(c => {
             const exp = c.expiryDate || c.expiry;
             return exp && exp === todayStr;
@@ -212,9 +225,9 @@ function initCharts() {
         }
     });
 
-    const activeCount = window.AppState.customers.filter(c => c.status === 'Active').length;
-    const expiredCount = window.AppState.customers.filter(c => c.status === 'Expired').length;
-    const suspendedCount = window.AppState.customers.filter(c => c.status === 'Suspended').length;
+    const activeCount = window.AppState.customers.filter(c => getCustomerDisplayStatus(c) === 'Active').length;
+    const expiredCount = window.AppState.customers.filter(c => getCustomerDisplayStatus(c) === 'Expired').length;
+    const suspendedCount = window.AppState.customers.filter(c => getCustomerDisplayStatus(c) === 'Suspended').length;
 
     new Chart(ctxStatus, {
         type: 'doughnut',
@@ -232,5 +245,3 @@ function initCharts() {
         }
     });
 }
-
-

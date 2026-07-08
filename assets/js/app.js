@@ -154,7 +154,7 @@ function initApp() {
     setInterval(() => {
         updateCustomerStatuses();
         if (window.AppState.currentSection === 'dashboard') renderSection('dashboard');
-        if (['expiring-soon', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday'].includes(window.AppState.currentSection)) {
+        if (['expiring-soon', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday', 'unpaid-recharges'].includes(window.AppState.currentSection)) {
             renderSection(window.AppState.currentSection);
         }
     }, 600000);
@@ -185,6 +185,7 @@ function updateCustomerStatuses() {
             c.status = 'Expired';
             updateData.status = 'Expired';
             updateData.paymentStatus = 'Due';
+            updateData.dueMonths = 1;
             needsUpdate = true;
 
             // Automated Billing: Create "Due" entry using customer.amount
@@ -206,6 +207,7 @@ function updateCustomerStatuses() {
                     id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
                     customer: c.name,
                     amount: currentAmount,
+                    months: 1,
                     date: today,
                     method: '-',
                     status: 'Due',
@@ -226,6 +228,14 @@ function updateCustomerStatuses() {
             await updateDoc(doc(db, "customers", c.firestoreId), updateData);
         }
     });
+}
+
+function getCustomerDisplayStatus(c) {
+    const today = new Date().toISOString().split('T')[0];
+    const expiry = c.expiryDate || c.expiry;
+    if (c.status === 'Suspended') return 'Suspended';
+    if (expiry && expiry < today) return 'Expired';
+    return c.status || 'Active';
 }
 
 /**
@@ -449,6 +459,10 @@ function renderSection(sectionId) {
                     if (window.renderCustomersTable) renderCustomersTable(area, { filter: window.AppState.currentFilter });
                     else throw new Error("renderCustomersTable not found");
                     break;
+                case 'unpaid-recharges':
+                    if (window.renderCustomersTable) renderCustomersTable(area, { filter: 'unpaid-recharges' });
+                    else throw new Error("renderCustomersTable not found");
+                    break;
                 case 'expiring-today':
                     if (window.renderCustomersTable) renderCustomersTable(area, { filter: 'expiring-today' });
                     else throw new Error("renderCustomersTable not found");
@@ -620,6 +634,8 @@ window.showLogoutConfirmation = showLogoutConfirmation;
 window.logout = logout;
 window.showToast = showToast;
 window.getDaysLeft = getDaysLeft;
+window.updateCustomerStatuses = updateCustomerStatuses;
+window.getCustomerDisplayStatus = getCustomerDisplayStatus;
 
 async function checkAndSeedDatabase(uid) {
     try {

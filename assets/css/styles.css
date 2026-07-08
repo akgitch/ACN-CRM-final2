@@ -194,6 +194,21 @@ body {
     box-shadow: 0 4px 15px rgba(var(--acn-blue-rgb), 0.3);
 }
 
+.nav-link.unpaid {
+    color: #ef4444;
+}
+
+.nav-link.unpaid:hover {
+    background: rgba(239, 68, 68, 0.08);
+    color: #ef4444;
+}
+
+.nav-link.unpaid.active {
+    background: #ef4444;
+    color: white;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+}
+
 .nav-link i {
     font-size: 1.2rem;
 }

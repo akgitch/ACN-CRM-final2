@@ -16,6 +16,15 @@ window.confirmDelete = confirmDelete;
 window.deleteCustomer = deleteCustomer;
 window.togglePaymentStatus = togglePaymentStatus;
 
+const getCustomerDisplayStatus = (c) => {
+    if (window.getCustomerDisplayStatus) return window.getCustomerDisplayStatus(c);
+    const today = new Date().toISOString().split('T')[0];
+    const expiry = c.expiryDate || c.expiry;
+    if (c.status === 'Suspended') return 'Suspended';
+    if (expiry && expiry < today) return 'Expired';
+    return c.status || 'Active';
+};
+
 // Real-time listener initializer for Customers
 window.initCustomersListener = function() {
     if (window.AppState.customersUnsub) {
@@ -29,8 +38,13 @@ window.initCustomersListener = function() {
         // Sort locally by ID descending
         window.AppState.customers.sort((a, b) => (parseInt(b.id) || 0) - (parseInt(a.id) || 0));
 
+        // Call updateCustomerStatuses if available to update any newly expired customer records in the DB
+        if (typeof window.updateCustomerStatuses === 'function') {
+            window.updateCustomerStatuses();
+        }
+
         // Trigger re-render if we are in customers or dashboard
-        if (['all-customers', 'dashboard', 'expiring-soon', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday'].includes(window.AppState.currentSection) ||
+        if (['all-customers', 'dashboard', 'expiring-soon', 'expiring-today', 'expiring-tomorrow', 'expired-yesterday', 'unpaid-recharges'].includes(window.AppState.currentSection) ||
             window.AppState.currentSection.includes('customers')) {
             renderSection(window.AppState.currentSection);
         }
@@ -84,8 +98,15 @@ function renderCustomersTable(container, options = {}) {
         });
         title = 'Expired Yesterday';
     } else if (filter === 'Active' || filter === 'Expired') {
-        displayCustomers = displayCustomers.filter(c => c.status === filter);
+        displayCustomers = displayCustomers.filter(c => getCustomerDisplayStatus(c) === filter);
         title = `${filter} Customers`;
+    } else if (filter === 'unpaid-recharges') {
+        displayCustomers = displayCustomers.filter(c => {
+            const currentExpiry = c.expiryDate || c.expiry || null;
+            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            return payStatus === 'Due';
+        });
+        title = 'Recharges Done but Payment Due';
     }
 
     // Sorting: Nearest Expiry first for expiring filters
@@ -133,6 +154,9 @@ function renderCustomersTable(container, options = {}) {
         const currentExpiry = c.expiryDate || c.expiry || null;
         const days = getDaysLeft(currentExpiry);
         const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+        const displayStatus = getCustomerDisplayStatus(c);
+        const displayMonths = c.dueMonths || 1;
+        const displayAmount = (c.amount || 0) * (payStatus === 'Due' ? displayMonths : 1);
 
         return `
                             <tr data-id="${c.id}">
@@ -142,7 +166,7 @@ function renderCustomersTable(container, options = {}) {
                                 <td>${c.plan}</td>
                                 <td>${currentExpiry || '-'}</td>
                                 <td style="color: ${days.color}; font-weight: 600;">${days.text}</td>
-                                <td><span class="status-badge ${getStatusClass(c.status)}">${c.status}</span></td>
+                                <td><span class="status-badge ${getStatusClass(displayStatus)}">${displayStatus}</span></td>
                                 <td>
                                     <div style="display: flex; align-items: center; gap: 12px;">
                                         <div style="display: flex; gap: 4px; background: rgba(0,0,0,0.05); padding: 2px; border-radius: 20px; width: fit-content;">
@@ -158,7 +182,7 @@ function renderCustomersTable(container, options = {}) {
                                             </button>
                                         </div>
                                         <span style="font-size: 0.85rem; font-weight: 600; color: ${payStatus === 'Due' ? '#ef4444' : '#22c55e'}; white-space: nowrap;">
-                                            ${payStatus} ₹${(c.amount || 0).toLocaleString()}
+                                            ${payStatus} ${payStatus === 'Due' ? `(${displayMonths}M due)` : ''} ₹${displayAmount.toLocaleString()}
                                         </span>
                                     </div>
                                 </td>
@@ -313,6 +337,8 @@ function renderAddCustomer(container) {
             amount: amount,
             id: (maxId + 1).toString(),
             status: 'Active',
+            paymentStatus: 'Paid',
+            dueMonths: 0,
             expiry: data.expiryDate || '',
             createdAt: new Date().toISOString()
         };
@@ -335,11 +361,12 @@ function viewCustomer(firestoreId) {
         showToast('Customer record not found', 'error');
         return;
     }
+    const displayStatus = getCustomerDisplayStatus(c);
     openModal(`
         <div style="padding: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px;">
                 <h3>Customer Details: #${c.id}</h3>
-                <span class="status-badge ${getStatusClass(c.status)}">${c.status}</span>
+                <span class="status-badge ${getStatusClass(displayStatus)}">${displayStatus}</span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                 <div>
@@ -565,13 +592,15 @@ async function togglePaymentStatus(customerName, firestoreId, newStatus) {
         try {
             // Update customer record with paymentStatus
             await updateDoc(doc(db, "customers", firestoreId), {
-                paymentStatus: 'Due'
+                paymentStatus: 'Due',
+                dueMonths: 1
             });
 
             await addDoc(collection(db, "payments"), {
                 id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
                 customer: customerName,
                 amount: customer.amount || 0,
+                months: 1,
                 date: today,
                 method: '-',
                 status: 'Due',
@@ -587,7 +616,8 @@ async function togglePaymentStatus(customerName, firestoreId, newStatus) {
         try {
             // Update customer record with paymentStatus
             await updateDoc(doc(db, "customers", firestoreId), {
-                paymentStatus: 'Paid'
+                paymentStatus: 'Paid',
+                dueMonths: 0
             });
 
             // Always create a new Paid entry as per instructions
@@ -595,6 +625,7 @@ async function togglePaymentStatus(customerName, firestoreId, newStatus) {
                 id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
                 customer: customerName,
                 amount: customer.amount || 0,
+                months: 1,
                 date: today,
                 method: '-',
                 status: 'Paid',
@@ -775,6 +806,7 @@ async function processRecharge(firestoreId, payStatus) {
             expiry: newExpiryStr,
             expiryDate: newExpiryStr,
             paymentStatus: payStatus,
+            dueMonths: payStatus === 'Due' ? months : 0,
             status: 'Active',
             amount: planPrice // Keep monthly price in the customer profile
         });
@@ -784,6 +816,7 @@ async function processRecharge(firestoreId, payStatus) {
             id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
             customer: c.name,
             amount: totalAmount,
+            months: months,
             date: todayStr,
             method: payStatus === 'Paid' ? 'UPI' : '-',
             status: payStatus,

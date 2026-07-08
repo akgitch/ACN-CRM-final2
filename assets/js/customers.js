@@ -800,13 +800,17 @@ async function processRecharge(firestoreId, payStatus) {
 
         const todayStr = new Date().toISOString().split('T')[0];
 
+        const currentDues = parseInt(c.dueMonths) || 0;
+        const newDues = payStatus === 'Due' ? (currentDues + months) : currentDues;
+        const finalPaymentStatus = newDues > 0 ? 'Due' : 'Paid';
+
         // 1. Update customer doc
         await updateDoc(doc(db, "customers", firestoreId), {
             plan: planName,
             expiry: newExpiryStr,
             expiryDate: newExpiryStr,
-            paymentStatus: payStatus,
-            dueMonths: payStatus === 'Due' ? months : 0,
+            paymentStatus: finalPaymentStatus,
+            dueMonths: newDues,
             status: 'Active',
             amount: planPrice // Keep monthly price in the customer profile
         });

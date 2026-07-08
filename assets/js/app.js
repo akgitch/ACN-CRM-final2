@@ -185,7 +185,7 @@ function updateCustomerStatuses() {
             c.status = 'Expired';
             updateData.status = 'Expired';
             updateData.paymentStatus = 'Due';
-            updateData.dueMonths = 1;
+            updateData.dueMonths = (c.dueMonths || 0) + 1;
             needsUpdate = true;
 
             // Automated Billing: Create "Due" entry using customer.amount

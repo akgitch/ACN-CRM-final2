@@ -6,6 +6,15 @@ import { auth, db } from './firebase-config.js';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-auth.js";
 import { collection, addDoc, query, where, getDocs, limit, doc, getDoc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.1.1/firebase-firestore.js";
 
+// Timezone-safe local date string generator (YYYY-MM-DD)
+function getLocalDateString(d = new Date()) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+window.getLocalDateString = getLocalDateString;
+
 // Global App State
 window.AppState = {
     customers: [],
@@ -161,7 +170,7 @@ function initApp() {
 }
 
 function updateCustomerStatuses() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     window.AppState.customers.forEach(async c => {
         // Data Migration: Unified SSoT field 'amount'
         const currentAmount = c.amount ?? c.planPrice ?? c.price ?? 0;
@@ -191,7 +200,7 @@ function updateCustomerStatuses() {
             // Automated Billing: Create "Due" entry using customer.amount
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const dateLimit = thirtyDaysAgo.toISOString().split('T')[0];
+            const dateLimit = getLocalDateString(thirtyDaysAgo);
 
             const q = query(
                 collection(db, "payments"),
@@ -231,7 +240,7 @@ function updateCustomerStatuses() {
 }
 
 function getCustomerDisplayStatus(c) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     const expiry = c.expiryDate || c.expiry;
     if (c.status === 'Suspended') return 'Suspended';
     if (expiry && expiry < today) return 'Expired';
@@ -248,7 +257,14 @@ function getDaysLeft(dateStr) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const exp = new Date(dateStr);
+
+    let exp;
+    if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        exp = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+        exp = new Date(dateStr);
+    }
     exp.setHours(0, 0, 0, 0);
 
     if (isNaN(exp.getTime())) return { text: '-', color: 'var(--text-secondary)' };
@@ -676,7 +692,7 @@ async function checkAndSeedDatabase(uid) {
             const formatOffsetDate = (daysOffset) => {
                 const d = new Date(today);
                 d.setDate(today.getDate() + daysOffset);
-                return d.toISOString().split('T')[0];
+                return getLocalDateString(d);
             };
 
             const defaultCustomers = [
@@ -699,7 +715,7 @@ async function checkAndSeedDatabase(uid) {
             const formatOffsetDate = (daysOffset) => {
                 const d = new Date(today);
                 d.setDate(today.getDate() + daysOffset);
-                return d.toISOString().split('T')[0];
+                return getLocalDateString(d);
             };
 
             const defaultPayments = [

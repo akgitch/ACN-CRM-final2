@@ -18,7 +18,7 @@ window.togglePaymentStatus = togglePaymentStatus;
 
 const getCustomerDisplayStatus = (c) => {
     if (window.getCustomerDisplayStatus) return window.getCustomerDisplayStatus(c);
-    const today = new Date().toISOString().split('T')[0];
+    const today = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
     const expiry = c.expiryDate || c.expiry;
     if (c.status === 'Suspended') return 'Suspended';
     if (expiry && expiry < today) return 'Expired';
@@ -59,19 +59,19 @@ function renderCustomersTable(container, options = {}) {
     let title = 'All Customers';
 
     // Apply Filters
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
 
     const yesterdayDate = new Date();
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+    const yesterdayStr = window.getLocalDateString ? window.getLocalDateString(yesterdayDate) : yesterdayDate.toISOString().split('T')[0];
 
     const tomorrowDate = new Date();
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+    const tomorrowStr = window.getLocalDateString ? window.getLocalDateString(tomorrowDate) : tomorrowDate.toISOString().split('T')[0];
 
     const sevenDaysLaterDate = new Date();
     sevenDaysLaterDate.setDate(sevenDaysLaterDate.getDate() + 7);
-    const sevenDaysLaterStr = sevenDaysLaterDate.toISOString().split('T')[0];
+    const sevenDaysLaterStr = window.getLocalDateString ? window.getLocalDateString(sevenDaysLaterDate) : sevenDaysLaterDate.toISOString().split('T')[0];
 
     if (filter === 'expiring') {
         displayCustomers = displayCustomers.filter(c => {
@@ -103,21 +103,21 @@ function renderCustomersTable(container, options = {}) {
     } else if (filter === 'unpaid-recharges') {
         displayCustomers = displayCustomers.filter(c => {
             const currentExpiry = c.expiryDate || c.expiry || null;
-            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
             return payStatus === 'Due';
         });
         title = 'Recharges Done but Payment Due';
     } else if (filter === 'unpaid-recharges-2m') {
         displayCustomers = displayCustomers.filter(c => {
             const currentExpiry = c.expiryDate || c.expiry || null;
-            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
             return payStatus === 'Due' && (c.dueMonths || 1) === 2;
         });
         title = '2 Months Due Customers';
     } else if (filter === 'unpaid-recharges-more-2m') {
         displayCustomers = displayCustomers.filter(c => {
             const currentExpiry = c.expiryDate || c.expiry || null;
-            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
             return payStatus === 'Due' && (c.dueMonths || 1) > 2;
         });
         title = '2+ Months Due Customers';
@@ -167,7 +167,7 @@ function renderCustomersTable(container, options = {}) {
                         ${displayCustomers.map(c => {
         const currentExpiry = c.expiryDate || c.expiry || null;
         const days = getDaysLeft(currentExpiry);
-        const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+        const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
         const displayStatus = getCustomerDisplayStatus(c);
         const displayMonths = c.dueMonths || 1;
         const displayAmount = (c.amount || 0) * (payStatus === 'Due' ? displayMonths : 1);
@@ -326,7 +326,7 @@ function renderAddCustomer(container) {
             const validity = selectedPlan ? (selectedPlan.validity || 30) : 30;
             const duration = parseInt(dSel.value) || 1;
             d.setDate(d.getDate() + (validity * duration));
-            eIn.value = d.toISOString().split('T')[0];
+            eIn.value = window.getLocalDateString ? window.getLocalDateString(d) : d.toISOString().split('T')[0];
         }
     };
 
@@ -509,7 +509,7 @@ function editCustomer(firestoreId) {
         if (iIn.value) {
             const d = new Date(iIn.value);
             d.setDate(d.getDate() + 30);
-            eIn.value = d.toISOString().split('T')[0];
+            eIn.value = window.getLocalDateString ? window.getLocalDateString(d) : d.toISOString().split('T')[0];
             err.textContent = '';
         }
     });
@@ -538,7 +538,7 @@ function editCustomer(firestoreId) {
         data.expiry = data.expiryDate || '';
 
         // Auto Status Update Logic
-        const today = new Date().toISOString().split('T')[0];
+        const today = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
         if (data.status !== 'Suspended') {
             if (data.expiryDate < today) {
                 data.status = 'Expired';
@@ -594,7 +594,7 @@ async function togglePaymentStatus(customerName, firestoreId, newStatus) {
     const customer = window.AppState.customers.find(c => c.firestoreId === firestoreId);
     if (!customer) return;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
 
     // Check for existing "Due" entry today to prevent duplicates
     const existingDue = window.AppState.payments.find(p =>
@@ -767,7 +767,7 @@ async function rechargeCustomer(firestoreId) {
 
         const calculatedExpiryDate = new Date(baseDate);
         calculatedExpiryDate.setDate(calculatedExpiryDate.getDate() + totalValidityDays);
-        const calculatedExpiryStr = calculatedExpiryDate.toISOString().split('T')[0];
+        const calculatedExpiryStr = window.getLocalDateString ? window.getLocalDateString(calculatedExpiryDate) : calculatedExpiryDate.toISOString().split('T')[0];
 
         priceDisplay.textContent = `₹${totalAmount.toLocaleString()}`;
         expiryDisplay.textContent = `${calculatedExpiryStr} (+${totalValidityDays} Days)`;
@@ -816,9 +816,9 @@ async function processRecharge(firestoreId, payStatus) {
 
         const newExpiryDate = new Date(baseDate);
         newExpiryDate.setDate(newExpiryDate.getDate() + totalValidityDays);
-        const newExpiryStr = newExpiryDate.toISOString().split('T')[0];
+        const newExpiryStr = window.getLocalDateString ? window.getLocalDateString(newExpiryDate) : newExpiryDate.toISOString().split('T')[0];
 
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
 
         const currentDues = parseInt(c.dueMonths) || 0;
         const newDues = payStatus === 'Due' ? (currentDues + months) : currentDues;

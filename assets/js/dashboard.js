@@ -5,7 +5,7 @@ window.initCharts = initCharts;
 
 const getCustomerDisplayStatus = (c) => {
     if (window.getCustomerDisplayStatus) return window.getCustomerDisplayStatus(c);
-    const today = new Date().toISOString().split('T')[0];
+    const today = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
     const expiry = c.expiryDate || c.expiry;
     if (c.status === 'Suspended') return 'Suspended';
     if (expiry && expiry < today) return 'Expired';
@@ -13,7 +13,7 @@ const getCustomerDisplayStatus = (c) => {
 };
 
 function renderDashboard(container) {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
     const thisMonth = todayStr.substring(0, 7);
 
     // Dynamic Calculations
@@ -27,7 +27,7 @@ function renderDashboard(container) {
 
     const dueCustomers = window.AppState.customers.filter(c => {
         const currentExpiry = c.expiryDate || c.expiry || null;
-        const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+        const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
         return payStatus === 'Due';
     });
     const totalDueAmount = dueCustomers.reduce((sum, c) => sum + ((c.amount || 0) * (c.dueMonths || 1)), 0);
@@ -121,15 +121,15 @@ function renderDashboard(container) {
 }
 
 function animateCounters() {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
 
     const tomorrowDate = new Date();
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+    const tomorrowStr = window.getLocalDateString ? window.getLocalDateString(tomorrowDate) : tomorrowDate.toISOString().split('T')[0];
 
     const sevenDaysLaterDate = new Date();
     sevenDaysLaterDate.setDate(sevenDaysLaterDate.getDate() + 7);
-    const sevenDaysLaterStr = sevenDaysLaterDate.toISOString().split('T')[0];
+    const sevenDaysLaterStr = window.getLocalDateString ? window.getLocalDateString(sevenDaysLaterDate) : sevenDaysLaterDate.toISOString().split('T')[0];
 
     const summary = {
         total: window.AppState.customers.length,
@@ -149,12 +149,12 @@ function animateCounters() {
         }).length,
         due2Months: window.AppState.customers.filter(c => {
             const currentExpiry = c.expiryDate || c.expiry || null;
-            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
             return payStatus === 'Due' && (c.dueMonths || 1) === 2;
         }).length,
         dueMore2Months: window.AppState.customers.filter(c => {
             const currentExpiry = c.expiryDate || c.expiry || null;
-            const payStatus = c.paymentStatus || (currentExpiry && new Date(currentExpiry) <= new Date() ? 'Due' : 'Paid');
+            const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
             return payStatus === 'Due' && (c.dueMonths || 1) > 2;
         }).length
     };
@@ -191,7 +191,7 @@ function initCharts() {
     const ctxRevenue = document.getElementById('revenueChart').getContext('2d');
     const ctxStatus = document.getElementById('statusChart').getContext('2d');
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
     const thisMonth = todayStr.substring(0, 7);
     const monthlyCollection = window.AppState.payments
         .filter(p => p.date.startsWith(thisMonth) && p.status === 'Paid')
@@ -205,7 +205,7 @@ function initCharts() {
     const today = new Date();
     for (let i = 5; i >= 0; i--) {
         const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const monthKey = d.toISOString().substring(0, 7); // "YYYY-MM"
+        const monthKey = window.getLocalDateString ? window.getLocalDateString(d).substring(0, 7) : d.toISOString().substring(0, 7); // "YYYY-MM"
         const label = standardMonthNames[d.getMonth()] + ' ' + d.getFullYear().toString().substring(2);
         last6MonthsLabels.push(label);
 

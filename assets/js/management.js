@@ -69,7 +69,8 @@ function renderPayments(container, params = {}) {
 
     let displayPayments = [...window.AppState.payments];
     if (isToday) {
-        displayPayments = displayPayments.filter(p => p.date === new Date().toISOString().split('T')[0]);
+        const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
+        displayPayments = displayPayments.filter(p => p.date === todayStr);
     } else if (filter === 'Due') {
         displayPayments = displayPayments.filter(p => p.status === 'Due');
     } else if (filter === 'Paid') {
@@ -187,7 +188,7 @@ function collectPayment() {
             id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
             customer: data.customer,
             amount: parseInt(data.amount),
-            date: new Date().toISOString().split('T')[0],
+            date: window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0],
             method: data.method,
             status: 'Paid',
             paid: true
@@ -235,7 +236,7 @@ async function markAsPaid(firestoreId) {
                 </div>
                 <div class="form-group">
                     <label class="modal-label">Date of Payment</label>
-                    <input type="date" name="date" value="${new Date().toISOString().split('T')[0]}" required class="glass-input">
+                    <input type="date" name="date" value="${window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0]}" required class="glass-input">
                 </div>
                 <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 10px;">
                     <button type="button" class="glass-button" onclick="closeModal()">Cancel</button>

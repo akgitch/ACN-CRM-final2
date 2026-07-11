@@ -820,7 +820,8 @@ async function processRecharge(firestoreId, payStatus) {
 
         const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
 
-        const currentDues = parseInt(c.dueMonths) || 0;
+        const isCurrentDue = c.paymentStatus === 'Due' || (currentExpiryStr && currentExpiryStr < todayStr);
+        const currentDues = isCurrentDue ? (parseInt(c.dueMonths) || 1) : 0;
         const newDues = payStatus === 'Due' ? (currentDues + months) : currentDues;
         const finalPaymentStatus = newDues > 0 ? 'Due' : 'Paid';
 

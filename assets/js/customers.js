@@ -15,6 +15,7 @@ window.editCustomer = editCustomer;
 window.confirmDelete = confirmDelete;
 window.deleteCustomer = deleteCustomer;
 window.togglePaymentStatus = togglePaymentStatus;
+window.exportCustomersToExcel = exportCustomersToExcel;
 
 const getCustomerDisplayStatus = (c) => {
     if (window.getCustomerDisplayStatus) return window.getCustomerDisplayStatus(c);
@@ -132,11 +133,24 @@ function renderCustomersTable(container, options = {}) {
         });
     }
 
+    window.AppState.currentCustomerList = displayCustomers;
+    window.AppState.currentCustomerTitle = title;
+
     const tableHTML = `
         <div class="glass-card" style="padding: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                 <h3>${title}</h3>
-                <div style="display: flex; gap: 12px;">
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                    <button class="glass-button" onclick="exportCustomersToExcel()" title="Export with Excel (All fields as entered)" style="display: inline-flex; align-items: center; gap: 8px; background: rgba(34, 197, 94, 0.12); color: #16a34a; border: 1px solid rgba(34, 197, 94, 0.35); font-weight: 600; padding: 9px 16px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="8" y1="13" x2="16" y2="13"></line>
+                            <line x1="8" y1="17" x2="16" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        <span>Export with Excel</span>
+                    </button>
                     ${isReadOnly() ? '' : `
                     <button class="glass-button primary" onclick="navigateTo('add-customer')">
                         <i class="lucide-user-plus"></i> Add New
@@ -861,3 +875,133 @@ async function processRecharge(firestoreId, payStatus) {
 // Expose Recharge Globals
 window.rechargeCustomer = rechargeCustomer;
 window.processRecharge = processRecharge;
+
+// Export Customers to Excel
+function exportCustomersToExcel() {
+    try {
+        const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
+
+        // Determine which customers are currently visible/active in the table
+        const tableRows = document.querySelectorAll('#customer-data-table tbody tr[data-id]');
+        let customersToExport = [];
+        const baseList = window.AppState.currentCustomerList || window.AppState.customers || [];
+
+        if (tableRows && tableRows.length > 0) {
+            const visibleIds = new Set();
+            let anyFiltered = false;
+            tableRows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const id = row.getAttribute('data-id');
+                    if (id) visibleIds.add(id);
+                } else {
+                    anyFiltered = true;
+                }
+            });
+
+            if (anyFiltered) {
+                // If user searched/filtered rows, only export the visible ones
+                customersToExport = baseList.filter(c => visibleIds.has(String(c.id)));
+            } else {
+                customersToExport = [...baseList];
+            }
+        } else {
+            customersToExport = [...baseList];
+        }
+
+        if (!customersToExport || customersToExport.length === 0) {
+            showToast('No customer records to export', 'warning');
+            return;
+        }
+
+        const dataRows = customersToExport.map(c => {
+            const currentExpiry = c.expiryDate || c.expiry || '';
+            const days = window.getDaysLeft ? window.getDaysLeft(currentExpiry) : { text: '' };
+            const payStatus = c.paymentStatus || (currentExpiry && currentExpiry < todayStr ? 'Due' : 'Paid');
+            const displayStatus = window.getCustomerDisplayStatus ? window.getCustomerDisplayStatus(c) : (c.status || 'Active');
+            const dueMonths = payStatus === 'Due' ? (parseInt(c.dueMonths) || 1) : 0;
+            const planAmount = parseFloat(c.amount) || 0;
+            const totalDue = payStatus === 'Due' ? (planAmount * dueMonths) : 0;
+            const regDate = c.createdAt ? c.createdAt.split('T')[0] : (c.install || '');
+
+            return {
+                'Customer ID': c.id ? `#${c.id}` : '-',
+                'Full Name': c.name || '-',
+                'Phone Number': c.phone || '-',
+                'Address': c.address || '-',
+                'Router MAC': c.mac || '-',
+                'Installation Date': c.install || '-',
+                'Plan Name': c.plan || '-',
+                'Duration (Months)': parseInt(c.duration) || 1,
+                'Plan Price (₹)': planAmount,
+                'Expiry Date': currentExpiry || '-',
+                'Days Left': days.text || '-',
+                'Account Status': displayStatus || 'Active',
+                'Payment Status': payStatus,
+                'Due Months': dueMonths,
+                'Total Due Amount (₹)': totalDue,
+                'Registration Date': regDate || '-'
+            };
+        });
+
+        const rawTitle = (tableRows && tableRows.length > 0 && window.AppState.currentCustomerTitle) ? window.AppState.currentCustomerTitle : (window.AppState.currentCustomerTitle || 'All_Customers');
+        const cleanTitle = rawTitle.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+        const fileName = `ACN_${cleanTitle}_${todayStr}.xlsx`;
+
+        if (window.XLSX) {
+            const ws = XLSX.utils.json_to_sheet(dataRows);
+            ws['!cols'] = [
+                { wch: 14 }, // Customer ID
+                { wch: 28 }, // Full Name
+                { wch: 16 }, // Phone Number
+                { wch: 34 }, // Address
+                { wch: 22 }, // Router MAC
+                { wch: 18 }, // Installation Date
+                { wch: 24 }, // Plan Name
+                { wch: 18 }, // Duration (Months)
+                { wch: 16 }, // Plan Price (₹)
+                { wch: 16 }, // Expiry Date
+                { wch: 16 }, // Days Left
+                { wch: 16 }, // Account Status
+                { wch: 16 }, // Payment Status
+                { wch: 14 }, // Due Months
+                { wch: 20 }, // Total Due Amount (₹)
+                { wch: 18 }  // Registration Date
+            ];
+            const wb = XLSX.utils.book_new();
+            const sheetName = cleanTitle.slice(0, 31) || 'Customers';
+            XLSX.utils.book_append_sheet(wb, ws, sheetName);
+            XLSX.writeFile(wb, fileName);
+            showToast(`Exported ${dataRows.length} customers to Excel successfully!`, 'success');
+        } else {
+            exportToCSV(dataRows, `ACN_${cleanTitle}_${todayStr}.csv`);
+            showToast(`Exported ${dataRows.length} customers to CSV successfully!`, 'success');
+        }
+    } catch (err) {
+        console.error('Export error:', err);
+        showToast('Failed to export customers: ' + err.message, 'error');
+    }
+}
+
+function exportToCSV(data, fileName) {
+    if (!data || !data.length) return;
+    const headers = Object.keys(data[0]);
+    const csvRows = [
+        headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(',')
+    ];
+    for (const row of data) {
+        const values = headers.map(h => {
+            const val = row[h] !== undefined && row[h] !== null ? String(row[h]) : '';
+            return `"${val.replace(/"/g, '""')}"`;
+        });
+        csvRows.push(values.join(','));
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}

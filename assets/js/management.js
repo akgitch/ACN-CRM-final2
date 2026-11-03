@@ -600,7 +600,7 @@ function renderReports(container, params = {}) {
                 <h2>${title}</h2>
                 <div style="display: flex; gap: 12px;">
                     <button class="glass-button" onclick="showToast('Loading data...', 'success')"><i class="lucide-refresh-cw"></i> Refresh</button>
-                    <button class="glass-button primary" onclick="showToast('Exporting PDF...', 'success')"><i class="lucide-download"></i> Export</button>
+                    <button class="glass-button primary" onclick="if (window.exportCustomersToExcel) exportCustomersToExcel(); else showToast('Exporting...', 'success');"><i class="lucide-download"></i> Export with Excel</button>
                 </div>
             </div>
             

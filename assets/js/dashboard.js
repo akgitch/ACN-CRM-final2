@@ -36,6 +36,24 @@ function renderDashboard(container) {
     const moreCount = dueCustomers.length > 3 ? dueCustomers.length - 3 : 0;
 
     const dashboardHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <h2 style="font-weight: 700; font-size: 1.5rem;">Dashboard Overview</h2>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px;">Real-time ISP performance and customer analytics</p>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <button class="glass-button" onclick="if (window.exportCustomersToExcel) exportCustomersToExcel();" title="Export all customers to Excel" style="display: inline-flex; align-items: center; gap: 8px; background: rgba(34, 197, 94, 0.12); color: #16a34a; border: 1px solid rgba(34, 197, 94, 0.35); font-weight: 600; padding: 9px 16px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="8" y1="13" x2="16" y2="13"></line>
+                        <line x1="8" y1="17" x2="16" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span>Export with Excel</span>
+                </button>
+            </div>
+        </div>
         <div class="stats-grid">
             <div class="glass-card stat-card" onclick="navigateTo('all-customers')">
                 <div class="stat-label">Total Customers</div>

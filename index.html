@@ -5,6 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACN Broadband CRM | Dashboard</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <script>
+        const APP_VERSION = '3.2';
+        if (localStorage.getItem('acn_crm_version') !== APP_VERSION) {
+            localStorage.setItem('acn_crm_version', APP_VERSION);
+            if ('caches' in window) {
+                caches.keys().then(names => {
+                    for (let name of names) caches.delete(name);
+                });
+            }
+        }
+    </script>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +28,7 @@
     <!-- Charts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Styles -->
-    <link rel="stylesheet" href="assets/css/styles.css?v=2.0">
+    <link rel="stylesheet" href="assets/css/styles.css?v=3.2">
 </head>
 
 <body data-theme="light">
@@ -129,6 +143,12 @@
                     </a>
                 </div>
                 <div class="nav-item">
+                    <a href="#" class="nav-link" onclick="if(window.exportCustomersToExcel) exportCustomersToExcel(); else showToast('Loading export module...', 'info'); return false;" style="color: #16a34a; font-weight: 600;">
+                        <i class="lucide-download"></i>
+                        <span>Export with Excel</span>
+                    </a>
+                </div>
+                <div class="nav-item">
                     <a href="#" class="nav-link" data-section="staff">
                         <i class="lucide-shield-check"></i>
                         <span>Staff Management</span>
@@ -189,11 +209,12 @@
 
     <!-- Scripts -->
     <!-- Core Logic -->
-    <script type="module" src="assets/js/firebase-config.js?v=2.1"></script>
-    <script type="module" src="assets/js/app.js?v=2.1"></script>
-    <script type="module" src="assets/js/dashboard.js?v=2.1"></script>
-    <script type="module" src="assets/js/customers.js?v=2.1"></script>
-    <script type="module" src="assets/js/management.js?v=2.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script type="module" src="assets/js/firebase-config.js?v=3.2"></script>
+    <script type="module" src="assets/js/app.js?v=3.2"></script>
+    <script type="module" src="assets/js/dashboard.js?v=3.2"></script>
+    <script type="module" src="assets/js/customers.js?v=3.2"></script>
+    <script type="module" src="assets/js/management.js?v=3.2"></script>
 </body>
 
 </html>

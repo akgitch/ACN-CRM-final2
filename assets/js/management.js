@@ -196,21 +196,57 @@ function collectPayment() {
 
         try {
             // Find customer to update their status
-            const customer = window.AppState.customers.find(c => c.name === data.customer);
-            if (customer && customer.firestoreId) {
-                await updateDoc(doc(db, "customers", customer.firestoreId), {
-                    paymentStatus: 'Paid',
-                    dueMonths: 0
-                });
+            const customer = window.AppState.customers.find(c => 
+                c.name === data.customer || 
+                (c.name && c.name.trim().toLowerCase() === data.customer.trim().toLowerCase())
+            );
+            if (customer) {
+                customer.paymentStatus = 'Paid';
+                customer.dueMonths = 0;
+                if (customer.firestoreId) {
+                    await updateDoc(doc(db, "customers", customer.firestoreId), {
+                        paymentStatus: 'Paid',
+                        dueMonths: 0
+                    });
+                }
             }
 
-            await addDoc(collection(db, "payments"), {
+            // Settle previous Due payments for this customer
+            const pendingPayments = (window.AppState.payments || []).filter(p =>
+                (customer && (p.customerId === customer.id || p.customer === customer.name)) && p.status === 'Due'
+            );
+            for (const p of pendingPayments) {
+                p.status = 'Paid';
+                p.paid = true;
+                p.method = data.method;
+                if (p.firestoreId) {
+                    try {
+                        await updateDoc(doc(db, "payments", p.firestoreId), {
+                            status: 'Paid',
+                            paid: true,
+                            method: data.method
+                        });
+                    } catch (err) {
+                        console.error('Failed to update due payment:', err);
+                    }
+                }
+            }
+
+            const docRef = await addDoc(collection(db, "payments"), {
                 ...newPayment,
                 status: 'Paid',
                 paid: true
             });
+            newPayment.firestoreId = docRef.id;
+            if (window.AppState.payments) {
+                window.AppState.payments.unshift(newPayment);
+            }
+
             showToast('Payment recorded successfully', 'success');
             closeModal();
+            if (window.renderSection) {
+                window.renderSection('payments');
+            }
         } catch (error) {
             showToast('Failed to record payment', 'error');
         }
@@ -253,13 +289,25 @@ async function markAsPaid(firestoreId) {
 
         try {
             // Find customer to update their status
-            const customer = window.AppState.customers.find(c => c.name === p.customer);
-            if (customer && customer.firestoreId) {
-                await updateDoc(doc(db, "customers", customer.firestoreId), {
-                    paymentStatus: 'Paid',
-                    dueMonths: 0
-                });
+            const customer = window.AppState.customers.find(c => 
+                (p.customerId && String(c.id) === String(p.customerId)) || 
+                (c.name && p.customer && c.name.trim().toLowerCase() === p.customer.trim().toLowerCase())
+            );
+            if (customer) {
+                customer.paymentStatus = 'Paid';
+                customer.dueMonths = 0;
+                if (customer.firestoreId) {
+                    await updateDoc(doc(db, "customers", customer.firestoreId), {
+                        paymentStatus: 'Paid',
+                        dueMonths: 0
+                    });
+                }
             }
+
+            p.status = 'Paid';
+            p.paid = true;
+            p.method = data.method;
+            p.date = data.date;
 
             await updateDoc(doc(db, "payments", firestoreId), {
                 status: 'Paid',
@@ -269,6 +317,9 @@ async function markAsPaid(firestoreId) {
             });
             showToast('Payment Marked as Paid', 'success');
             closeModal();
+            if (window.renderSection) {
+                window.renderSection('payments');
+            }
         } catch (error) {
             showToast('Update failed', 'error');
         }

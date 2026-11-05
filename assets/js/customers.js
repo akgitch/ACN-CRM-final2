@@ -624,13 +624,17 @@ async function togglePaymentStatus(customerName, firestoreId, newStatus) {
         }
 
         try {
+            customer.paymentStatus = 'Due';
+            customer.dueMonths = (parseInt(customer.dueMonths) || 0) + 1;
+            if (customer.dueMonths < 1) customer.dueMonths = 1;
+
             // Update customer record with paymentStatus
             await updateDoc(doc(db, "customers", firestoreId), {
                 paymentStatus: 'Due',
-                dueMonths: 1
+                dueMonths: customer.dueMonths
             });
 
-            await addDoc(collection(db, "payments"), {
+            const newDuePay = {
                 id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
                 customer: customerName,
                 amount: customer.amount || 0,
@@ -641,33 +645,66 @@ async function togglePaymentStatus(customerName, firestoreId, newStatus) {
                 paid: false,
                 customerId: customer.id,
                 createdAt: new Date().toISOString()
-            });
+            };
+            const docRef = await addDoc(collection(db, "payments"), newDuePay);
+            newDuePay.firestoreId = docRef.id;
+            if (window.AppState.payments) window.AppState.payments.unshift(newDuePay);
+
             showToast(`Marked ${customerName} as Due`, 'warning');
+            if (window.renderSection) window.renderSection(window.AppState.currentSection || 'all-customers');
         } catch (error) {
             showToast('Failed to update status', 'error');
         }
     } else if (newStatus === 'Paid') {
         try {
+            customer.paymentStatus = 'Paid';
+            customer.dueMonths = 0;
+
             // Update customer record with paymentStatus
             await updateDoc(doc(db, "customers", firestoreId), {
                 paymentStatus: 'Paid',
                 dueMonths: 0
             });
 
-            // Always create a new Paid entry as per instructions
-            await addDoc(collection(db, "payments"), {
+            // Settle any existing Due payments for this customer
+            const pendingPayments = (window.AppState.payments || []).filter(p =>
+                (p.customer === customerName || p.customerId === customer.id) && p.status === 'Due'
+            );
+            for (const p of pendingPayments) {
+                p.status = 'Paid';
+                p.paid = true;
+                p.method = p.method === '-' ? 'UPI' : p.method;
+                if (p.firestoreId) {
+                    try {
+                        await updateDoc(doc(db, "payments", p.firestoreId), {
+                            status: 'Paid',
+                            paid: true,
+                            method: p.method
+                        });
+                    } catch (e) {
+                        console.error('Failed to update due payment:', e);
+                    }
+                }
+            }
+
+            const newPaidPay = {
                 id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
                 customer: customerName,
                 amount: customer.amount || 0,
                 months: 1,
                 date: today,
-                method: '-',
+                method: 'UPI',
                 status: 'Paid',
                 paid: true,
                 customerId: customer.id,
                 createdAt: new Date().toISOString()
-            });
+            };
+            const docRef = await addDoc(collection(db, "payments"), newPaidPay);
+            newPaidPay.firestoreId = docRef.id;
+            if (window.AppState.payments) window.AppState.payments.unshift(newPaidPay);
+
             showToast(`Marked ${customerName} as Paid`, 'success');
+            if (window.renderSection) window.renderSection(window.AppState.currentSection || 'all-customers');
         } catch (error) {
             showToast('Failed to process payment', 'error');
         }
@@ -834,10 +871,19 @@ async function processRecharge(firestoreId, payStatus) {
 
         const todayStr = window.getLocalDateString ? window.getLocalDateString() : new Date().toISOString().split('T')[0];
 
-        const isCurrentDue = c.paymentStatus === 'Due' || (currentExpiryStr && currentExpiryStr < todayStr);
-        const currentDues = isCurrentDue ? (parseInt(c.dueMonths) || 1) : 0;
-        const newDues = payStatus === 'Due' ? (currentDues + months) : currentDues;
-        const finalPaymentStatus = newDues > 0 ? 'Due' : 'Paid';
+        let finalPaymentStatus = 'Paid';
+        let newDues = 0;
+        if (payStatus === 'Due') {
+            finalPaymentStatus = 'Due';
+            const currentDues = c.paymentStatus === 'Due' ? (parseInt(c.dueMonths) || 1) : 0;
+            newDues = currentDues + months;
+        } else {
+            finalPaymentStatus = 'Paid';
+            newDues = 0;
+        }
+
+
+
 
         // 1. Update customer doc
         await updateDoc(doc(db, "customers", firestoreId), {
@@ -847,11 +893,45 @@ async function processRecharge(firestoreId, payStatus) {
             paymentStatus: finalPaymentStatus,
             dueMonths: newDues,
             status: 'Active',
-            amount: planPrice // Keep monthly price in the customer profile
+            amount: planPrice
         });
 
+        // Update in-memory customer immediately
+        c.plan = planName;
+        c.expiry = newExpiryStr;
+        c.expiryDate = newExpiryStr;
+        c.paymentStatus = finalPaymentStatus;
+        c.dueMonths = newDues;
+        c.status = 'Active';
+        c.amount = planPrice;
+
+        // Settle previous Due payment records if marked as Paid
+        if (payStatus === 'Paid') {
+            const pendingPayments = (window.AppState.payments || []).filter(p =>
+                (p.customer === c.name || p.customerId === c.id) && p.status === 'Due'
+            );
+            for (const p of pendingPayments) {
+                if (p.firestoreId) {
+                    p.status = 'Paid';
+                    p.paid = true;
+                    p.method = p.method === '-' ? 'UPI' : p.method;
+                    try {
+                        await updateDoc(doc(db, "payments", p.firestoreId), {
+                            status: 'Paid',
+                            paid: true,
+                            method: p.method
+                        });
+                    } catch (err) {
+                        console.error('Failed to update due payment:', err);
+                    }
+                }
+            }
+        }
+
+
+
         // 2. Add payment record (with totalAmount for the recharged duration)
-        await addDoc(collection(db, "payments"), {
+        const rechargePayment = {
             id: `RC-${Math.floor(Math.random() * 9000 + 1000)}`,
             customer: c.name,
             amount: totalAmount,
@@ -862,10 +942,18 @@ async function processRecharge(firestoreId, payStatus) {
             paid: payStatus === 'Paid',
             customerId: c.id,
             createdAt: new Date().toISOString()
-        });
+        };
+        const docRef = await addDoc(collection(db, "payments"), rechargePayment);
+        rechargePayment.firestoreId = docRef.id;
+        if (window.AppState.payments) {
+            window.AppState.payments.unshift(rechargePayment);
+        }
 
         showToast(`Recharge successful! Extended to ${newExpiryStr} (${payStatus})`, 'success');
         closeModal();
+        if (window.renderSection) {
+            window.renderSection(window.AppState.currentSection || 'all-customers');
+        }
     } catch (error) {
         console.error("Recharge failed:", error);
         showToast('Failed to complete recharge', 'error');
